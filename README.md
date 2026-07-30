@@ -11,8 +11,6 @@ There is **no bundled database and no hand-written data dictionary**. A dataset
 exists only because someone uploaded it, and everything the agents know about it
 was derived at upload time.
 
-![Asking a question and getting an answer with a chart](docs/screenshots/chat.jpg)
-
 ---
 
 ## Quickstart
