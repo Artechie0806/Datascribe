@@ -1,0 +1,1739 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DataScribe — chat with your data</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    color-scheme:light;
+    --bg:#faf9f7; --rail:#f0eee7; --panel:#ffffff; --sunk:#f5f4ef;
+    --line:#e8e5dd; --line-2:#dbd7cc;
+    --text:#1f1e1d; --text-2:#6b6a66; --text-3:#96948d;
+    --accent:#d97757; --accent-2:#c4643f; --accent-wash:#f7ece7;
+    --good:#0ca30c; --good-ink:#1a7a1a; --good-wash:#eef7ee;
+    --warn:#c07f1a; --warn-ink:#8a5a10; --warn-wash:#faf2e2;
+    --bad:#d03b3b; --bad-ink:#a52626; --bad-wash:#fbeded;
+    --grid:#ebe8e0; --baseline:#d5d1c6; --surface:#ffffff;
+    /* categorical slots — CVD-validated order, light steps */
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+    --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948;
+    --seq-1:#cde2fb; --seq-2:#9ec5f4; --seq-3:#6da7ec; --seq-4:#3987e5;
+    --seq-5:#256abf; --seq-6:#184f95; --seq-7:#0d366b;
+    --div-neg:#d03b3b; --div-pos:#2a78d6; --dim:#c9c6bd;
+    --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --serif:'Source Serif 4',Georgia,serif;
+    --mono:'JetBrains Mono',ui-monospace,monospace;
+    --r:12px; --rail-w:272px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:where(:not([data-theme="light"])){
+      color-scheme:dark;
+      --bg:#262624; --rail:#1f1e1d; --panel:#30302e; --sunk:#2b2b29;
+      --line:#3d3d3a; --line-2:#4a4a46;
+      --text:#f5f4ef; --text-2:#b4b2ab; --text-3:#8d8b84;
+      --accent:#d97757; --accent-2:#e08a6e; --accent-wash:#3a2a24;
+      --good:#0ca30c; --good-ink:#5cc45c; --good-wash:#1e2a1e;
+      --warn:#e0a63c; --warn-ink:#e0a63c; --warn-wash:#332a17;
+      --bad:#e57676; --bad-ink:#e57676; --bad-wash:#33201f;
+      --grid:#3a3a37; --baseline:#4a4a46; --surface:#30302e;
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+      --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+      --seq-1:#184f95; --seq-2:#256abf; --seq-3:#2a78d6; --seq-4:#3987e5;
+      --seq-5:#5598e7; --seq-6:#86b6ef; --seq-7:#b7d3f6;
+      --dim:#55544f;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0; height:100%}
+  body{background:var(--bg); color:var(--text); font-family:var(--sans);
+       font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased;
+       display:flex; overflow:hidden}
+  button{font-family:inherit; color:inherit}
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  ::selection{background:var(--accent-wash)}
+  ::-webkit-scrollbar{width:10px; height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--line-2); border-radius:6px; border:3px solid transparent; background-clip:content-box}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  /* ── rail ───────────────────────────────────────────────────────────── */
+  .rail{width:var(--rail-w); flex:0 0 var(--rail-w); background:var(--rail);
+        border-right:1px solid var(--line); display:flex; flex-direction:column;
+        height:100vh; transition:margin-left .22s ease}
+  body.rail-closed .rail{margin-left:calc(var(--rail-w) * -1)}
+  .rail-top{display:flex; align-items:center; gap:10px; padding:14px 14px 10px}
+  .logo{display:flex; align-items:center; gap:9px; font-weight:600; font-size:15.5px; letter-spacing:-.01em}
+  .spark{width:18px; height:18px; flex:0 0 auto; color:var(--accent)}
+  .icon-btn{width:30px; height:30px; border:0; border-radius:8px; background:transparent;
+            display:grid; place-items:center; cursor:pointer; color:var(--text-2); transition:.14s}
+  .icon-btn:hover{background:var(--line); color:var(--text)}
+  .rail-scroll{flex:1; overflow-y:auto; padding:6px 10px 24px}
+  .newbtn{display:flex; align-items:center; gap:9px; width:100%; padding:9px 11px;
+          border:1px solid var(--line-2); border-radius:10px; background:var(--panel);
+          font-size:14px; font-weight:500; cursor:pointer; margin-bottom:16px; transition:.14s}
+  .newbtn:hover{border-color:var(--accent); color:var(--accent-2)}
+  .rail-h{font-size:11.5px; font-weight:600; letter-spacing:.04em; color:var(--text-3);
+          text-transform:uppercase; padding:0 4px; margin:16px 0 7px}
+  .rail-h:first-child{margin-top:2px}
+  .ds{display:flex; align-items:center; gap:9px; width:100%; padding:8px 10px; border:0;
+      border-radius:9px; background:transparent; cursor:pointer; text-align:left;
+      font-size:13.5px; transition:.14s; margin-bottom:2px}
+  .ds:hover{background:var(--line)}
+  .ds.on{background:var(--panel); box-shadow:0 1px 3px rgba(0,0,0,.05); font-weight:500}
+  .ds-name{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .ds-meta{font-size:11px; color:var(--text-3); font-family:var(--mono)}
+  .ds-summary{font-size:12.5px; color:var(--text-2); line-height:1.5; padding:0 4px 8px}
+
+  .tbl{margin-bottom:5px}
+  .tbl-h{display:flex; align-items:center; gap:7px; width:100%; padding:6px 8px; border:0;
+         border-radius:8px; background:transparent; cursor:pointer; text-align:left; transition:.14s}
+  .tbl-h:hover{background:var(--line)}
+  .tbl-name{flex:1; font-family:var(--mono); font-size:12px; overflow:hidden;
+            text-overflow:ellipsis; white-space:nowrap}
+  .tbl-rows{font-size:10.5px; color:var(--text-3); font-family:var(--mono)}
+  .chev{width:8px; height:8px; border-right:1.5px solid var(--text-3);
+        border-bottom:1.5px solid var(--text-3); transform:rotate(-45deg);
+        transition:transform .18s; flex:0 0 auto; margin-right:1px}
+  .tbl.open .chev{transform:rotate(45deg)}
+  .tbl-body{display:none; padding:3px 0 8px 15px; margin-left:7px; border-left:1px solid var(--line-2)}
+  .tbl.open .tbl-body{display:block}
+  .grain{font-size:11.5px; color:var(--text-2); padding:2px 8px 7px; line-height:1.45}
+  .col{display:flex; align-items:center; gap:6px; padding:3px 8px; border-radius:6px; cursor:default}
+  .col:hover{background:var(--line)}
+  .col-n{font-family:var(--mono); font-size:11.5px; flex:1; min-width:0;
+         overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .role{font-size:9px; font-weight:600; letter-spacing:.04em; text-transform:uppercase;
+        padding:1.5px 5px; border-radius:4px; background:var(--line); color:var(--text-3); flex:0 0 auto}
+  .role.measure{background:var(--accent-wash); color:var(--accent-2)}
+  .role.temporal{background:var(--warn-wash); color:var(--warn-ink)}
+  .flag{font-size:11.5px; line-height:1.45; padding:7px 9px; border-radius:8px;
+        background:var(--panel); border-left:2px solid var(--warn); margin-bottom:5px}
+  .flag.serious{border-left-color:var(--bad)}
+  .flag b{font-family:var(--mono); font-size:10.5px; font-weight:500; display:block}
+  .flag span{color:var(--text-2)}
+  .rel{font-family:var(--mono); font-size:10.5px; color:var(--text-2); padding:5px 9px;
+       background:var(--panel); border-radius:7px; margin-bottom:4px; word-break:break-all}
+
+  /* ── main ───────────────────────────────────────────────────────────── */
+  .main{flex:1; min-width:0; display:flex; flex-direction:column; height:100vh; position:relative}
+  .topbar{display:flex; align-items:center; gap:10px; padding:10px 18px; min-height:52px}
+  .topbar .title{font-size:14px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .topbar .sub{font-size:12px; color:var(--text-3); font-family:var(--mono)}
+  .grow{flex:1}
+  .pill{height:30px; padding:0 12px; border:1px solid var(--line-2); border-radius:999px;
+        background:transparent; font-size:12.5px; cursor:pointer; display:inline-flex;
+        align-items:center; gap:6px; transition:.14s; white-space:nowrap}
+  .pill:hover{border-color:var(--text-3); background:var(--panel)}
+  .pill.danger:hover{border-color:var(--bad); color:var(--bad-ink)}
+
+  .thread{flex:1; overflow-y:auto; scroll-behavior:smooth}
+  .thread-in{max-width:768px; margin:0 auto; padding:8px 24px 24px}
+
+  /* ── empty state ────────────────────────────────────────────────────── */
+  .hero{display:flex; flex-direction:column; align-items:center; justify-content:center;
+        min-height:calc(100vh - 200px); text-align:center; padding:20px 0}
+  .hero h1{font-family:var(--serif); font-size:clamp(30px,4.4vw,42px); font-weight:400;
+           letter-spacing:-.01em; margin:0 0 10px; line-height:1.15}
+  .hero h1 em{font-style:italic; color:var(--accent)}
+  .hero p{max-width:440px; margin:0 0 30px; color:var(--text-2); font-size:15px}
+  .drop{width:100%; max-width:520px; border:1.5px dashed var(--line-2); border-radius:16px;
+        background:var(--panel); padding:34px 24px; cursor:pointer; transition:.18s}
+  .drop:hover,.drop.over{border-color:var(--accent); background:var(--accent-wash)}
+  .drop.over{border-style:solid; transform:scale(1.01)}
+  .drop-t{font-size:15px; font-weight:500}
+  .drop-s{margin-top:6px; font-family:var(--mono); font-size:11px; color:var(--text-3); letter-spacing:.02em}
+  .hero .note{margin-top:20px; font-size:12.5px; color:var(--text-3); max-width:520px}
+
+  /* ── turns ──────────────────────────────────────────────────────────── */
+  .turn{margin:26px 0}
+  .turn.user{display:flex; justify-content:flex-end}
+  .bubble{background:var(--rail); border:1px solid var(--line); border-radius:16px;
+          padding:11px 16px; max-width:82%; font-size:15px; white-space:pre-wrap; word-break:break-word}
+  .turn.bot{display:flex; gap:13px; animation:fade .3s ease both}
+  @keyframes fade{from{opacity:0; transform:translateY(5px)} to{opacity:1; transform:none}}
+  .avatar{width:26px; height:26px; flex:0 0 auto; border-radius:7px; background:var(--accent);
+          display:grid; place-items:center; color:#fff; margin-top:1px}
+  .body{flex:1; min-width:0}
+
+  .live{display:flex; align-items:center; gap:9px; color:var(--text-2); font-size:14px; padding:2px 0}
+  .live .dot{width:6px; height:6px; border-radius:50%; background:var(--accent); animation:pulse 1.1s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.3; transform:scale(.8)} 50%{opacity:1; transform:scale(1.15)}}
+  .shimmer{background:linear-gradient(90deg,var(--text-2) 20%,var(--text) 40%,var(--text-2) 60%);
+           background-size:220% 100%; -webkit-background-clip:text; background-clip:text;
+           -webkit-text-fill-color:transparent; animation:sweep 2s linear infinite}
+  @keyframes sweep{to{background-position:-220% 0}}
+
+  details.work{border:1px solid var(--line); border-radius:11px; background:var(--panel);
+               margin-bottom:14px; overflow:hidden}
+  details.work>summary{list-style:none; cursor:pointer; padding:10px 14px; font-size:13.5px;
+                       color:var(--text-2); display:flex; align-items:center; gap:9px; user-select:none}
+  details.work>summary::-webkit-details-marker{display:none}
+  details.work>summary:hover{background:var(--sunk)}
+  details.work[open]>summary{border-bottom:1px solid var(--line)}
+  details.work[open]>summary .chev{transform:rotate(45deg)}
+  .work-in{padding:4px 14px 14px}
+
+  pre.sql{margin:0; padding:12px 14px; font-family:var(--mono); font-size:12px; line-height:1.6;
+          overflow-x:auto; white-space:pre; background:var(--sunk); border:1px solid var(--line);
+          border-radius:9px; color:var(--text)}
+  .sql .kw{color:var(--accent-2); font-weight:500}
+  .sql .fn{color:var(--s7)}
+  .sql .str{color:var(--good-ink)}
+  .sql .num{color:var(--s2)}
+  .sql .cm{color:var(--text-3); font-style:italic}
+  .repair{display:flex; gap:9px; font-size:12.5px; color:var(--text-2); background:var(--bad-wash);
+          border-radius:8px; padding:8px 11px; margin-top:7px; line-height:1.45}
+  .repair b{color:var(--bad-ink); font-family:var(--mono); font-size:11px; white-space:nowrap}
+
+  .grid-wrap{overflow:auto; max-height:340px; border:1px solid var(--line); border-radius:9px}
+  table.grid{border-collapse:collapse; width:100%; font-size:12.5px}
+  table.grid th{position:sticky; top:0; background:var(--sunk); text-align:left; font-size:10.5px;
+                font-weight:600; letter-spacing:.03em; text-transform:uppercase; color:var(--text-3);
+                padding:8px 11px; border-bottom:1px solid var(--line); white-space:nowrap; z-index:1}
+  table.grid td{padding:6px 11px; border-bottom:1px solid var(--line); white-space:nowrap;
+                max-width:260px; overflow:hidden; text-overflow:ellipsis}
+  table.grid tr:last-child td{border-bottom:0}
+  table.grid td.num{text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums}
+  table.grid td.nil{color:var(--text-3); font-style:italic}
+  table.grid tr:hover td{background:var(--sunk)}
+  .grid-foot{font-size:11px; color:var(--text-3); font-family:var(--mono); margin-top:6px}
+
+  /* ── chart card ─────────────────────────────────────────────────────── */
+  .viz{border:1px solid var(--line); border-radius:12px; background:var(--panel);
+       overflow:hidden; margin-bottom:14px}
+  .viz-head{padding:13px 15px 0}
+  .viz-title{font-size:15px; font-weight:600; margin:0; letter-spacing:-.005em}
+  .viz-why{font-size:12.5px; color:var(--text-2); margin:3px 0 0; line-height:1.45}
+  .ctrls{display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:11px 15px 0}
+  .seg{display:inline-flex; background:var(--sunk); border:1px solid var(--line); border-radius:8px; padding:2px}
+  .seg button{border:0; background:transparent; border-radius:6px; padding:4px 9px; font-size:11.5px;
+              cursor:pointer; color:var(--text-2); transition:.13s; white-space:nowrap}
+  .seg button:hover{color:var(--text)}
+  .seg button.on{background:var(--panel); color:var(--text); font-weight:500; box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  select.mini{height:26px; border:1px solid var(--line); border-radius:8px; background:var(--sunk);
+              font-family:var(--sans); font-size:11.5px; color:var(--text-2); padding:0 6px; cursor:pointer}
+  .ctrl-sp{flex:1}
+  .legend{display:flex; flex-wrap:wrap; gap:4px; padding:10px 15px 0}
+  .lg{display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-2);
+      background:transparent; border:1px solid transparent; border-radius:7px; padding:3px 8px;
+      cursor:pointer; transition:.13s}
+  .lg:hover{border-color:var(--line-2)}
+  .lg i{width:9px; height:9px; border-radius:2.5px; flex:0 0 auto; transition:.13s}
+  .lg.off{opacity:.42}
+  .lg.off i{background:var(--dim) !important}
+  .chart-host{position:relative; padding:8px 15px 12px}
+  .chart-host svg{display:block; width:100%; height:auto; overflow:visible}
+  .tip{position:absolute; pointer-events:none; opacity:0; transform:translate(-50%,-100%);
+       background:var(--text); color:var(--bg); border-radius:8px; padding:7px 10px; font-size:12px;
+       line-height:1.5; white-space:nowrap; z-index:20; transition:opacity .1s;
+       box-shadow:0 8px 24px rgba(0,0,0,.2)}
+  .tip b{font-family:var(--mono); font-size:12.5px}
+  .tip.on{opacity:1}
+  .adjust{margin:0 15px 13px; padding:8px 11px; border-radius:8px; background:var(--sunk);
+          font-size:11.5px; color:var(--text-2); line-height:1.5}
+  .adjust b{font-size:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase;
+            color:var(--text-3); display:block; margin-bottom:3px}
+  .no-chart{display:flex; gap:11px; padding:14px 15px; font-size:13.5px; color:var(--text-2); line-height:1.5}
+  .no-chart .ic{flex:0 0 auto; width:26px; height:26px; border-radius:7px; background:var(--sunk);
+                display:grid; place-items:center; color:var(--text-3)}
+  .stat{padding:24px 15px 8px; text-align:center}
+  .stat-v{font-size:clamp(32px,5.5vw,46px); font-weight:600; letter-spacing:-.03em; line-height:1}
+  .stat-l{font-size:11.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--text-3); margin-top:8px}
+
+  /* mark entry animations */
+  @keyframes growY{from{transform:scaleY(0)} to{transform:scaleY(1)}}
+  @keyframes growX{from{transform:scaleX(0)} to{transform:scaleX(1)}}
+  @keyframes popIn{from{opacity:0; transform:scale(.4)} to{opacity:1; transform:scale(1)}}
+  @keyframes drawIn{to{stroke-dashoffset:0}}
+  .m-up{transform-box:fill-box; transform-origin:bottom; animation:growY .5s cubic-bezier(.2,.8,.3,1) both}
+  .m-right{transform-box:fill-box; transform-origin:left; animation:growX .5s cubic-bezier(.2,.8,.3,1) both}
+  .m-pop{transform-box:fill-box; transform-origin:center; animation:popIn .4s cubic-bezier(.2,.8,.3,1) both}
+  .m-draw{animation:drawIn .75s cubic-bezier(.4,0,.2,1) both}
+  .fade-lbl{animation:fade .4s ease both; animation-delay:.4s}
+  /* A pie grows from its own centre, so the origin is set per chart in px and
+     the box is the view-box — scaling each slice about its own bbox would pull
+     them apart from the middle instead. */
+  @keyframes bloom{from{opacity:0; transform:scale(.9)} to{opacity:1; transform:scale(1)}}
+  .m-bloom{transform-box:view-box; animation:bloom .45s cubic-bezier(.2,.8,.3,1) both}
+
+  /* ── answer ─────────────────────────────────────────────────────────── */
+  .answer{font-size:15.5px; line-height:1.7}
+  .answer p{margin:0 0 12px}
+  .answer p:last-child{margin-bottom:0}
+  .answer ul{margin:0 0 12px; padding-left:20px}
+  .answer li{margin-bottom:3px}
+  .answer strong{font-weight:600}
+  .answer code{font-family:var(--mono); font-size:.88em; background:var(--sunk);
+               border:1px solid var(--line); border-radius:5px; padding:1px 5px}
+
+  .sugs{display:flex; flex-wrap:wrap; gap:6px; margin-top:12px}
+  .sug{border:1px solid var(--line-2); border-radius:999px; background:var(--panel);
+       color:var(--text-2); font-size:13px; padding:6px 13px; cursor:pointer; transition:.14s; text-align:left}
+  .sug:hover{border-color:var(--accent); color:var(--accent-2); background:var(--accent-wash)}
+  .banner{display:flex; gap:10px; border-radius:10px; padding:12px 14px; font-size:13.5px;
+          line-height:1.5; margin-bottom:12px}
+  .banner.error{background:var(--bad-wash); color:var(--bad-ink)}
+  .banner.info{background:var(--accent-wash); color:var(--accent-2)}
+  .runmeta{font-size:11px; color:var(--text-3); font-family:var(--mono); margin-top:12px}
+
+  /* ── composer ───────────────────────────────────────────────────────── */
+  .composer-wrap{padding:0 24px 20px; background:linear-gradient(to top,var(--bg) 62%,transparent)}
+  .composer{max-width:768px; margin:0 auto; background:var(--panel); border:1px solid var(--line-2);
+            border-radius:18px; padding:10px 10px 8px 16px; box-shadow:0 2px 14px rgba(0,0,0,.05);
+            transition:.16s}
+  .composer:focus-within{border-color:var(--accent); box-shadow:0 2px 18px rgba(217,119,87,.14)}
+  .composer textarea{width:100%; border:0; outline:0; background:transparent; resize:none;
+                     font:inherit; font-size:15.5px; color:var(--text); line-height:1.55;
+                     max-height:190px; min-height:26px; display:block}
+  .composer textarea::placeholder{color:var(--text-3)}
+  .comp-row{display:flex; align-items:center; gap:8px; margin-top:6px}
+  .send{width:32px; height:32px; border:0; border-radius:9px; background:var(--accent); color:#fff;
+        display:grid; place-items:center; cursor:pointer; transition:.14s; flex:0 0 auto}
+  .send:hover{background:var(--accent-2)}
+  .send:disabled{background:var(--line-2); cursor:not-allowed}
+  .send.stop{background:var(--text-2)}
+  .send.stop:hover{background:var(--text)}
+  .viz-table{padding:0 15px 14px}
+  .hint{font-size:11.5px; color:var(--text-3)}
+  .spin{width:13px; height:13px; border:2px solid var(--line-2); border-top-color:var(--accent);
+        border-radius:50%; animation:spin .7s linear infinite; display:inline-block; flex:0 0 auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  @media (prefers-reduced-motion:reduce){ *{animation-duration:.01ms !important; transition-duration:.01ms !important} }
+  @media (max-width:860px){
+    .rail{position:fixed; z-index:50; box-shadow:0 0 40px rgba(0,0,0,.14)}
+    body:not(.rail-open) .rail{margin-left:calc(var(--rail-w) * -1)}
+    .thread-in,.composer-wrap{padding-left:14px; padding-right:14px}
+  }
+</style>
+</head>
+<body class="rail-open">
+
+<nav class="rail">
+  <div class="rail-top">
+    <span class="logo">
+      <svg class="spark" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 2.2l2.1 6.1 6.2 2.1-6.2 2.1-2.1 6.1-2.1-6.1-6.2-2.1 6.2-2.1L12 2.2z"/>
+      </svg>
+      DataScribe
+    </span>
+    <span class="grow"></span>
+    <button class="icon-btn" id="railToggle" title="Hide sidebar" aria-label="Hide sidebar">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+        <rect x="1.8" y="2.6" width="12.4" height="10.8" rx="2"/><path d="M6.2 2.6v10.8"/></svg>
+    </button>
+  </div>
+  <div class="rail-scroll">
+    <button class="newbtn" id="newBtn">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3.2v9.6M3.2 8h9.6"/></svg>
+      New dataset
+    </button>
+    <div id="railBody"></div>
+  </div>
+</nav>
+
+<div class="main">
+  <div class="topbar">
+    <button class="icon-btn" id="railOpen" style="display:none" aria-label="Show sidebar">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+        <rect x="1.8" y="2.6" width="12.4" height="10.8" rx="2"/><path d="M6.2 2.6v10.8"/></svg>
+    </button>
+    <span class="title" id="dsTitle"></span>
+    <span class="sub" id="dsSub"></span>
+    <span class="grow"></span>
+    <button class="pill" id="clearBtn" hidden>New chat</button>
+    <button class="pill danger" id="delBtn" hidden>Delete dataset</button>
+  </div>
+
+  <div class="thread" id="thread">
+    <div class="thread-in" id="threadIn">
+      <div class="hero" id="hero">
+        <h1>What should we <em>look at?</em></h1>
+        <p>Drop a file and talk to it. Nothing is pre-loaded — the schema is
+           measured from the file itself, and every answer comes with a chart
+           when a chart says it better.</p>
+        <div class="drop" id="drop" tabindex="0" role="button" aria-label="Upload a data file">
+          <div class="drop-t">Drop a file here, or click to choose</div>
+          <div class="drop-s">CSV · TSV · XLSX · XLS · SQLITE · DB · DUCKDB · PARQUET · JSON</div>
+        </div>
+        <div id="uploadMsg" style="margin-top:14px; width:100%; max-width:520px"></div>
+        <p class="note">Upload several files at once and they land in one warehouse,
+          so they can be joined.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="composer-wrap">
+    <form class="composer" id="askForm">
+      <textarea id="q" rows="1" placeholder="Ask anything about this data…" disabled></textarea>
+      <div class="comp-row">
+        <span class="hint" id="hint">Upload a dataset to begin</span>
+        <span class="grow"></span>
+        <button class="send" id="sendBtn" type="submit" disabled aria-label="Send">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M3.6 7.4 8 3l4.4 4.4"/></svg>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<input type="file" id="file" multiple hidden
+       accept=".csv,.tsv,.txt,.xlsx,.xlsm,.xls,.db,.sqlite,.sqlite3,.db3,.duckdb,.ddb,.parquet,.pq,.json,.jsonl,.ndjson">
+
+<script>
+"use strict";
+const $ = (s, r=document) => r.querySelector(s);
+const el = (tag, cls, txt) => { const n = document.createElement(tag); if (cls) n.className = cls; if (txt != null) n.textContent = txt; return n; };
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* `history` is the conversation, and it lives here rather than on the server:
+   every turn posts the last few exchanges with it, so a reload starts clean and
+   two tabs cannot tread on each other's thread. */
+const state = { dataset:null, catalog:null, datasets:[], starters:[],
+                history:[], abort:null, busy:false };
+const HISTORY_SENT = 6;
+
+/* ══ formatting ════════════════════════════════════════════════════════ */
+const nf = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+/* Deliberately NOT Intl's `notation:"compact"` — that is locale-dependent, and
+   on an en-IN machine it renders 324,676 as "3.2L". An axis tick has to mean the
+   same thing to everyone reading the chart, so the suffixes are fixed. */
+function compact(v) {
+  const a = Math.abs(v);
+  for (const [n, s] of [[1e12,"T"],[1e9,"B"],[1e6,"M"],[1e3,"k"]])
+    if (a >= n) return (v / n).toFixed(1).replace(/\.0$/, "") + s;
+  return nf.format(v);
+}
+/** Full precision — tooltips, stat tiles, anything the reader stops to read. */
+function fmtValue(v, kind) {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v !== "number") return String(v);
+  if (kind === "percent") return nf.format(v) + "%";
+  if (kind === "compact") return compact(v);
+  return nf.format(v);
+}
+/** One number format per chart, decided once from the axis extent — a chart
+    whose tall bar reads "498.2k" while its short bars read "35,310.75" looks
+    like two charts spliced together. Ticks stay undecorated (they are round by
+    construction); mark labels take their decimal count from the data, so
+    23,553.30 and 35,310.75 line up. Tooltips are deliberately NOT routed
+    through this: hovering is where you go to read the exact number. */
+function chartFormats(peak, values, kind) {
+  const short = kind === "compact" || Math.abs(peak) >= 100000;
+  if (kind === "percent") {
+    const pct = v => isNum(v) ? nf.format(v) + "%" : fmtValue(v, kind);
+    return { tick: pct, label: pct };
+  }
+  const tick = v => isNum(v) ? (short ? compact(v) : nf.format(v)) : fmtValue(v, kind);
+  if (short) return { tick, label: tick };
+  const dp = values.some(v => isNum(v) && !Number.isInteger(v)) ? 2 : 0;
+  const fixed = new Intl.NumberFormat(undefined,
+    { minimumFractionDigits: dp, maximumFractionDigits: dp });
+  return { tick, label: v => isNum(v) ? fixed.format(v) : fmtValue(v, kind) };
+}
+/** Every value this chart actually plots, for the decimal-count decision. */
+const plotted = data => data.rows.flatMap(r => data.multi ? r.values : [r.total]);
+const isNum = v => typeof v === "number" && Number.isFinite(v);
+/** Column name → readable label: jun_2025_gtv → "Jun 2025 gtv". */
+const pretty = s => String(s ?? "").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+
+/* ══ palette — read the validated tokens off the stylesheet ════════════ */
+const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const SERIES = () => ["--s1","--s2","--s3","--s4","--s5","--s6","--s7","--s8"].map(tok);
+const SEQ = () => ["--seq-1","--seq-2","--seq-3","--seq-4","--seq-5","--seq-6","--seq-7"].map(tok);
+
+/* ══ SVG helpers ═══════════════════════════════════════════════════════ */
+const NS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] !== undefined && attrs[k] !== null) n.setAttribute(k, attrs[k]);
+  return n;
+}
+/** Rounded only at the data end, anchored square on the baseline. */
+function barPath(x, y, w, h, r, dir) {
+  r = Math.max(0, Math.min(r, w / 2, h));
+  if (h <= 0.6) return `M${x} ${y+h} h${w}`;
+  if (dir === "up")    return `M${x} ${y+h} V${y+r} a${r} ${r} 0 0 1 ${r} ${-r} h${w-2*r} a${r} ${r} 0 0 1 ${r} ${r} V${y+h} Z`;
+  if (dir === "down")  return `M${x} ${y} V${y+h-r} a${r} ${r} 0 0 0 ${r} ${r} h${w-2*r} a${r} ${r} 0 0 0 ${r} ${-r} V${y} Z`;
+  if (dir === "right") return `M${x} ${y} h${w-r} a${r} ${r} 0 0 1 ${r} ${r} v${h-2*r} a${r} ${r} 0 0 1 ${-r} ${r} H${x} Z`;
+  return `M${x+w} ${y} H${x+r} a${r} ${r} 0 0 0 ${-r} ${r} v${h-2*r} a${r} ${r} 0 0 0 ${r} ${r} H${x+w} Z`;
+}
+/** Axis ticks on round numbers, so the reader isn't decoding 3.7142. */
+function niceTicks(lo, hi, count) {
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { lo:0, hi:1, ticks:[0,1] };
+  if (lo === hi) { if (lo === 0) { hi = 1; } else { lo = Math.min(0, lo); hi = Math.max(0, hi); } }
+  const span = hi - lo || 1;
+  const raw = span / Math.max(1, count);
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].find(m => m * mag >= raw) * mag;
+  const s = Math.floor(lo / step) * step, e = Math.ceil(hi / step) * step;
+  const ticks = [];
+  for (let v = s; v <= e + step / 2; v += step) ticks.push(Math.abs(v) < step / 1e6 ? 0 : v);
+  return { lo: s, hi: e, ticks };
+}
+/** DATE_TRUNC hands back a midnight timestamp, and the time half is pure noise
+    on an axis. Display only — tooltips and keys keep the value as it came. */
+const tidyLabel = s => String(s ?? "").replace(/T00:00:00(\.0+)?Z?$/, "");
+const truncLabel = (s, n) => { s = tidyLabel(s); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+
+/** Ink that stays legible on an arbitrary fill. The categorical ramp spans a
+    dark indigo and a bright yellow, so one fixed label colour fails at one end
+    or the other; this picks per segment. */
+function inkOn(fill) {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(String(fill).trim());
+  if (!m) return tok("--text");
+  const n = parseInt(m[1], 16);
+  const lin = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map(c => {
+    const s = c / 255;
+    return s <= .04045 ? s / 12.92 : ((s + .055) / 1.055) ** 2.4;
+  });
+  return (.2126 * lin[0] + .7152 * lin[1] + .0722 * lin[2]) > .42 ? "#151515" : "#ffffff";
+}
+
+function attachTip(host) {
+  let tip = host.querySelector(".tip");
+  if (!tip) { tip = el("div", "tip"); host.appendChild(tip); }
+  return {
+    show(x, y, html) { tip.innerHTML = html; tip.style.left = x + "px"; tip.style.top = (y - 10) + "px"; tip.classList.add("on"); },
+    hide() { tip.classList.remove("on"); }
+  };
+}
+function hoverMark(node, tip, host, html) {
+  node.style.cursor = "pointer";
+  node.addEventListener("mousemove", ev => {
+    const b = host.getBoundingClientRect();
+    tip.show(ev.clientX - b.left, ev.clientY - b.top, html);
+  });
+  node.addEventListener("mouseleave", () => tip.hide());
+}
+
+/* ══ data prep ═════════════════════════════════════════════════════════
+   Handles both result shapes:
+     LONG  — one dimension column + one measure + an optional series column
+     WIDE  — one dimension column + SEVERAL measure columns, where the
+             comparison lives across columns (may_gtv, jun_gtv). Those melt
+             into series here; without this the chart shows one of them and
+             silently drops the comparison the user asked for.               */
+function prepare(spec, res, opts) {
+  opts = opts || {};
+  const form = opts.form || spec.form;
+  const sort = opts.sort !== undefined ? opts.sort : spec.sort;
+  const limit = opts.limit !== undefined ? opts.limit : spec.limit;
+  const hidden = opts.hidden || new Set();
+
+  const ix = res.columns.indexOf(spec.x);
+  if (ix < 0) return null;
+  const wideCols = (spec.y_columns || []).filter(c => res.columns.indexOf(c) >= 0);
+  const wide = wideCols.length >= 2;
+  const iy = wide ? -1 : res.columns.indexOf(spec.y);
+  if (!wide && iy < 0) return null;
+  const is = (!wide && spec.series) ? res.columns.indexOf(spec.series) : -1;
+
+  const keys = [], seriesNames = [], cells = new Map();
+  const bump = (xk, sk, v) => {
+    const k = xk + " " + sk;
+    cells.set(k, (cells.get(k) || 0) + v);
+  };
+
+  for (const r of res.rows) {
+    const xk = r[ix] === null ? "—" : String(r[ix]);
+    if (wide) {
+      let any = false;
+      for (const c of wideCols) {
+        const v = r[res.columns.indexOf(c)];
+        if (!isNum(v)) continue;
+        any = true;
+        if (!seriesNames.includes(c)) seriesNames.push(c);
+        bump(xk, c, v);
+      }
+      if (any && !keys.includes(xk)) keys.push(xk);
+    } else {
+      const v = r[iy];
+      if (!isNum(v)) continue;
+      const sk = is >= 0 ? String(r[is] ?? "—") : "";
+      if (!keys.includes(xk)) keys.push(xk);
+      if (is >= 0 && !seriesNames.includes(sk)) seriesNames.push(sk);
+      bump(xk, sk, v);
+    }
+  }
+  if (!keys.length) return null;
+
+  let names = wide ? wideCols.filter(c => seriesNames.includes(c)) : seriesNames;
+  const multi = wide || is >= 0;
+
+  // Rank series by total so an "Other" fold keeps the ones that matter.
+  if (!wide && is >= 0 && names.length > 8) {
+    const totals = names.map(n => [n, keys.reduce((a, k) => a + (cells.get(k + " " + n) || 0), 0)]);
+    totals.sort((a, b) => b[1] - a[1]);
+    const keep = totals.slice(0, 7).map(t => t[0]);
+    for (const k of keys) {
+      let other = 0;
+      for (const n of names) if (!keep.includes(n)) { other += cells.get(k + " " + n) || 0; cells.delete(k + " " + n); }
+      if (other) cells.set(k + " Other", other);
+    }
+    names = keep.concat(["Other"]);
+  }
+
+  const allNames = multi ? names.slice() : [""];
+  const shown = allNames.filter(n => !hidden.has(n));
+  const use = shown.length ? shown : allNames;
+
+  let rows = keys.map(k => ({
+    x: k,
+    total: use.reduce((a, n) => a + (cells.get(k + " " + n) || 0), 0),
+    values: use.map(n => { const v = cells.get(k + " " + n); return v === undefined ? null : v; })
+  }));
+
+  if (sort === "value_desc") rows.sort((a, b) => b.total - a.total);
+  else if (sort === "value_asc") rows.sort((a, b) => a.total - b.total);
+  else if (sort === "x_asc") rows.sort((a, b) => String(a.x).localeCompare(String(b.x), undefined, { numeric: true }));
+
+  let folded = 0;
+  if (limit && rows.length > limit) { folded = rows.length - limit; rows = rows.slice(0, limit); }
+
+  // Scatter keeps raw pairs — collapsing them into categories would destroy it.
+  let points = null;
+  if (form === "scatter") {
+    const px = res.columns.indexOf(spec.x), py = wide ? res.columns.indexOf(wideCols[0]) : iy;
+    points = res.rows.filter(r => isNum(r[px]) && isNum(r[py]))
+      .map(r => ({ x: r[px], y: r[py], s: is >= 0 ? String(r[is] ?? "—") : "" }));
+  }
+  return { rows, names: multi ? use : [""], allNames, folded, points,
+           stacked: form === "stacked_bar", multi, wide };
+}
+
+/* ══ renderer ══════════════════════════════════════════════════════════ */
+function renderChart(host, spec, res, opts) {
+  opts = opts || {};
+  const tipHost = host;
+  [...host.querySelectorAll("svg,.no-chart")].forEach(n => n.remove());
+  const W = Math.max(300, host.clientWidth - 30 || 620);
+  const form = opts.form || spec.form;
+  const data = prepare(spec, res, opts);
+  if (!data || !data.rows.length) {
+    host.appendChild(el("div", "no-chart", "Nothing plottable with these settings."));
+    return null;
+  }
+  const tip = attachTip(tipHost);
+  const ctx = { W, tip, host, spec, data, form,
+    ink: tok("--text"), muted: tok("--text-2"), faint: tok("--text-3"),
+    grid: tok("--grid"), base: tok("--baseline"), surface: tok("--surface") };
+
+  if (form === "hbar") drawHBar(ctx);
+  else if (form === "scatter") drawScatter(ctx);
+  else if (form === "line" || form === "area") drawLine(ctx);
+  else if (form === "share") drawShare(ctx);
+  else drawBar(ctx);
+  return data;
+}
+
+function colorFor(ctx, i, x, value) {
+  const { spec, data } = ctx;
+  if (spec.emphasis) return String(x) === spec.emphasis ? tok("--accent") : tok("--dim");
+  if (data.multi) return SERIES()[i % 8];
+  if (spec.color_job === "diverging") return value < 0 ? tok("--div-neg") : tok("--div-pos");
+  if (spec.color_job === "sequential" && data.rows.length > 1) {
+    const vals = data.rows.map(r => r.total);
+    const lo = Math.min(...vals), hi = Math.max(...vals);
+    const seq = SEQ();
+    const t = hi === lo ? 1 : (value - lo) / (hi - lo);
+    return seq[Math.min(seq.length - 1, Math.max(2, Math.round(2 + t * (seq.length - 3))))];
+  }
+  return SERIES()[0];
+}
+function seriesColor(ctx, i) {
+  return ctx.data.multi ? SERIES()[ctx.data.allNames.indexOf(ctx.data.names[i]) % 8] : SERIES()[0];
+}
+function axisText(parent, x, y, txt, fill, anchor, size = 11, extra = {}) {
+  const t = svgEl("text", { x, y, fill, "text-anchor": anchor || "middle",
+    "font-size": size, "font-family": "var(--sans)", ...extra });
+  t.textContent = txt;
+  parent.appendChild(t);
+  return t;
+}
+const stagger = (node, i, n) => { node.style.animationDelay = Math.min(320, i * (n > 24 ? 6 : 26)) + "ms"; };
+
+function drawBar(ctx) {
+  const { W, data, spec, form, grid, base, faint, muted, surface, tip, host } = ctx;
+  const H = 300, padL = 66, padR = 14, padT = 14, padB = 54;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const multi = data.multi, stacked = form === "stacked_bar";
+
+  let lo = 0, hi = 0;
+  for (const r of data.rows) {
+    if (stacked || !multi) { hi = Math.max(hi, r.total); lo = Math.min(lo, r.total); }
+    else for (const v of r.values) if (isNum(v)) { hi = Math.max(hi, v); lo = Math.min(lo, v); }
+  }
+  const sc = niceTicks(Math.min(0, lo), hi, 5);
+  const Y = v => padT + ih - ((v - sc.lo) / (sc.hi - sc.lo)) * ih;
+  const F = chartFormats(Math.max(Math.abs(sc.lo), Math.abs(sc.hi)),
+                         plotted(data), spec.value_format);
+
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+  for (const t of sc.ticks) {
+    svg.appendChild(svgEl("line", { x1: padL, x2: W - padR, y1: Y(t), y2: Y(t),
+      stroke: t === 0 ? base : grid, "stroke-width": 1 }));
+    axisText(svg, padL - 9, Y(t) + 4, F.tick(t), faint, "end", 10.5,
+      { "font-variant-numeric": "tabular-nums" });
+  }
+
+  const n = data.rows.length;
+  const slot = iw / n, bw = Math.min(52, Math.max(3, slot * 0.68));
+  const groups = multi && !stacked ? data.names.length : 1;
+  const gw = groups > 1 ? Math.max(2, (bw - 2 * (groups - 1)) / groups) : bw;
+
+  data.rows.forEach((r, ri) => {
+    const cx = padL + slot * ri + slot / 2;
+    if (stacked) {
+      let acc = 0;
+      r.values.forEach((v, si) => {
+        if (!isNum(v)) return;
+        const y0 = Y(acc), y1 = Y(acc + v); acc += v;
+        const h = Math.max(0, y0 - y1 - 2);                  // 2px surface gap
+        const top = si === r.values.length - 1 || !r.values.slice(si + 1).some(isNum);
+        const p = svgEl("path", { d: barPath(cx - bw / 2, y1, bw, h, top ? 4 : 0, "up"),
+          fill: seriesColor(ctx, si), class: "m-up" });
+        stagger(p, ri, n);
+        hoverMark(p, tip, host, `<b>${esc(r.x)}</b><br>${esc(pretty(data.names[si]))}: ${esc(fmtValue(v, spec.value_format))}`);
+        svg.appendChild(p);
+      });
+    } else if (multi) {
+      r.values.forEach((v, si) => {
+        if (!isNum(v)) return;
+        const x = cx - bw / 2 + si * (gw + 2);
+        const up = v >= 0;
+        const p = svgEl("path", { d: barPath(x, up ? Y(v) : Y(0), gw, Math.abs(Y(v) - Y(0)), 4, up ? "up" : "down"),
+          fill: seriesColor(ctx, si), class: "m-up" });
+        stagger(p, ri, n);
+        hoverMark(p, tip, host, `<b>${esc(r.x)}</b><br>${esc(pretty(data.names[si]))}: ${esc(fmtValue(v, spec.value_format))}`);
+        svg.appendChild(p);
+      });
+    } else {
+      const v = r.total, up = v >= 0;
+      const p = svgEl("path", { d: barPath(cx - bw / 2, up ? Y(v) : Y(0), bw, Math.abs(Y(v) - Y(0)), 4, up ? "up" : "down"),
+        fill: colorFor(ctx, ri, r.x, v), class: "m-up" });
+      stagger(p, ri, n);
+      hoverMark(p, tip, host, `<b>${esc(r.x)}</b><br>${esc(pretty(spec.y_label || spec.y))}: ${esc(fmtValue(v, spec.value_format))}`);
+      svg.appendChild(p);
+      if (n <= 12) axisText(svg, cx, Y(Math.max(0, v)) - 7, F.label(v), muted, "middle", 10.5,
+        { class: "fade-lbl" });
+    }
+  });
+
+  const every = Math.ceil(n / Math.max(4, Math.floor(iw / 64)));
+  data.rows.forEach((r, ri) => {
+    if (ri % every) return;
+    const cx = padL + slot * ri + slot / 2;
+    const t = axisText(svg, cx, H - padB + 18, truncLabel(r.x, 14), faint, n > 8 ? "end" : "middle", 10.5);
+    if (n > 8) t.setAttribute("transform", `rotate(-35 ${cx} ${H - padB + 18})`);
+  });
+  const zero = Y(Math.max(sc.lo, 0));
+  svg.appendChild(svgEl("line", { x1: padL, x2: W - padR, y1: zero, y2: zero, stroke: base, "stroke-width": 1 }));
+  axisText(svg, padL, H - 6, pretty(spec.x_label || spec.x), faint, "start", 10.5);
+  host.appendChild(svg);
+}
+
+function drawHBar(ctx) {
+  const { W, data, spec, grid, base, faint, muted, tip, host } = ctx;
+  const n = data.rows.length, multi = data.multi;
+  const per = multi ? data.names.length : 1;
+  const rowH = Math.max(multi ? 14 * per + 10 : 20, Math.min(38, 360 / Math.max(1, n)));
+  const padL = Math.min(200, Math.max(92, W * 0.3)), padR = 58, padT = 8, padB = 30;
+  const H = padT + padB + rowH * n;
+  const iw = W - padL - padR;
+
+  let lo = 0, hi = 0;
+  for (const r of data.rows) {
+    if (multi) for (const v of r.values) { if (isNum(v)) { hi = Math.max(hi, v); lo = Math.min(lo, v); } }
+    else { hi = Math.max(hi, r.total); lo = Math.min(lo, r.total); }
+  }
+  const sc = niceTicks(Math.min(0, lo), hi, 4);
+  const X = v => padL + ((v - sc.lo) / (sc.hi - sc.lo)) * iw;
+  const F = chartFormats(Math.max(Math.abs(sc.lo), Math.abs(sc.hi)),
+                         plotted(data), spec.value_format);
+
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+  for (const t of sc.ticks) {
+    svg.appendChild(svgEl("line", { x1: X(t), x2: X(t), y1: padT, y2: H - padB,
+      stroke: t === 0 ? base : grid, "stroke-width": 1 }));
+    axisText(svg, X(t), H - padB + 15, F.tick(t), faint, "middle", 10.5,
+      { "font-variant-numeric": "tabular-nums" });
+  }
+  data.rows.forEach((r, ri) => {
+    const top = padT + ri * rowH;
+    axisText(svg, padL - 10, top + rowH / 2 + 4, truncLabel(r.x, Math.floor(padL / 7)), muted, "end", 11.5);
+    const vals = multi ? r.values : [r.total];
+    const bh = Math.max(4, (rowH - 8) / vals.length - (vals.length > 1 ? 2 : 0));
+    vals.forEach((v, si) => {
+      if (!isNum(v)) return;
+      const y = top + 4 + si * (bh + 2), pos = v >= 0;
+      const p = svgEl("path", { d: barPath(pos ? X(0) : X(v), y, Math.abs(X(v) - X(0)), bh, 4, pos ? "right" : "left"),
+        fill: multi ? seriesColor(ctx, si) : colorFor(ctx, ri, r.x, v), class: "m-right" });
+      stagger(p, ri, n);
+      hoverMark(p, tip, host, `<b>${esc(r.x)}</b><br>${esc(pretty(multi ? data.names[si] : (spec.y_label || spec.y)))}: ${esc(fmtValue(v, spec.value_format))}`);
+      svg.appendChild(p);
+      if (n * vals.length <= 26)
+        axisText(svg, X(v) + (pos ? 7 : -7), y + bh / 2 + 4, F.label(v),
+          faint, pos ? "start" : "end", 10, { "font-variant-numeric": "tabular-nums", class: "fade-lbl" });
+    });
+  });
+  const zero = X(Math.max(sc.lo, 0));
+  svg.appendChild(svgEl("line", { x1: zero, x2: zero, y1: padT, y2: H - padB, stroke: base, "stroke-width": 1 }));
+  host.appendChild(svg);
+}
+
+function drawLine(ctx) {
+  const { W, data, spec, form, grid, base, faint, surface, tip, host } = ctx;
+  const H = 300, padL = 66, padR = 16, padT = 16, padB = 46;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const multi = data.multi;
+
+  let lo = Infinity, hi = -Infinity;
+  for (const r of data.rows) for (const v of r.values) if (isNum(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  if (!Number.isFinite(lo)) return;
+  const sc = niceTicks(form === "area" ? Math.min(0, lo) : lo, hi, 5);
+  const n = data.rows.length;
+  const X = i => padL + (n === 1 ? iw / 2 : (i / (n - 1)) * iw);
+  const Y = v => padT + ih - ((v - sc.lo) / (sc.hi - sc.lo)) * ih;
+  const F = chartFormats(Math.max(Math.abs(sc.lo), Math.abs(sc.hi)),
+                         plotted(data), spec.value_format);
+
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+  for (const t of sc.ticks) {
+    svg.appendChild(svgEl("line", { x1: padL, x2: W - padR, y1: Y(t), y2: Y(t),
+      stroke: t === 0 ? base : grid, "stroke-width": 1 }));
+    axisText(svg, padL - 9, Y(t) + 4, F.tick(t), faint, "end", 10.5,
+      { "font-variant-numeric": "tabular-nums" });
+  }
+
+  const count = multi ? data.names.length : 1;
+  const strokes = [];          // measured after the svg is in the document
+  for (let si = 0; si < count; si++) {
+    const color = multi ? seriesColor(ctx, si) : (spec.emphasis ? tok("--accent") : SERIES()[0]);
+    const pts = [];
+    data.rows.forEach((r, i) => { const v = multi ? r.values[si] : r.total; if (isNum(v)) pts.push([X(i), Y(v), v, r.x]); });
+    if (!pts.length) continue;
+    const d = pts.map((p, i) => (i ? "L" : "M") + p[0] + " " + p[1]).join(" ");
+    // Every series gets its fill, not just a lone one: picking "Area" on a
+    // two-series result used to render an ordinary line chart, which reads as
+    // the control being broken. Overlapping fills stay light so the strokes,
+    // which carry the actual values, remain the strongest thing on the plot.
+    if (form === "area") {
+      const floor = Y(Math.max(sc.lo, 0));
+      svg.appendChild(svgEl("path", {
+        d: `${d} L${pts[pts.length - 1][0]} ${floor} L${pts[0][0]} ${floor} Z`,
+        fill: color, "fill-opacity": multi ? .10 : .14, class: "m-pop" }));
+    }
+    const line = svgEl("path", { d, fill: "none", stroke: color, "stroke-width": 2,
+      "stroke-linejoin": "round", "stroke-linecap": "round" });
+    svg.appendChild(line);
+    strokes.push({ line, si, drawable: pts.length > 1 });
+    if (n <= 40) pts.forEach((p, i) => {
+      const c = svgEl("circle", { cx: p[0], cy: p[1], r: 4, fill: color,
+        stroke: surface, "stroke-width": 2, class: "m-pop" });   // 2px surface ring
+      c.style.animationDelay = (300 + si * 90 + i * 12) + "ms";
+      svg.appendChild(c);
+    });
+  }
+
+  const cross = svgEl("line", { y1: padT, y2: padT + ih, stroke: base, "stroke-width": 1, opacity: 0 });
+  svg.appendChild(cross);
+  data.rows.forEach((r, i) => {
+    const half = n === 1 ? iw / 2 : iw / (n - 1) / 2;
+    const hit = svgEl("rect", { x: X(i) - half, y: padT, width: Math.max(6, half * 2), height: ih,
+      fill: "transparent", style: "cursor:crosshair" });
+    hit.addEventListener("mouseenter", () => { cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i)); cross.setAttribute("opacity", 1); });
+    hit.addEventListener("mousemove", ev => {
+      const b = host.getBoundingClientRect();
+      const lines = (multi ? data.names : [spec.y_label || spec.y]).map((nm, si) => {
+        const v = multi ? r.values[si] : r.total;
+        return isNum(v) ? `${esc(pretty(nm))}: ${esc(fmtValue(v, spec.value_format))}` : null;
+      }).filter(Boolean).join("<br>");
+      tip.show(ev.clientX - b.left, ev.clientY - b.top, `<b>${esc(r.x)}</b><br>${lines}`);
+    });
+    hit.addEventListener("mouseleave", () => { cross.setAttribute("opacity", 0); tip.hide(); });
+    svg.appendChild(hit);
+  });
+
+  // The final label is always a candidate so the axis ends on a real value —
+  // but it is dropped when it would print on top of the one before it, which is
+  // what "2025-07-01" and "2025-12-01" were doing at 60 points.
+  const every = Math.ceil(n / Math.max(3, Math.floor(iw / 80)));
+  let lastLabelX = -Infinity;
+  data.rows.forEach((r, i) => {
+    if (i % every && i !== n - 1) return;
+    const lx = X(i);
+    if (lx - lastLabelX < 62) return;
+    lastLabelX = lx;
+    axisText(svg, lx, H - padB + 18, truncLabel(r.x, 12), faint, "middle", 10.5);
+  });
+  svg.appendChild(svgEl("line", { x1: padL, x2: W - padR, y1: padT + ih, y2: padT + ih, stroke: base, "stroke-width": 1 }));
+  axisText(svg, padL, H - 6, pretty(spec.x_label || spec.x), faint, "start", 10.5);
+  host.appendChild(svg);
+
+  /* The draw-in has to know the REAL length of each path. It used to guess
+     (points × 60), and whenever the guess came in under the true length the
+     dash pattern repeated instead of clearing — a six-point trend across a wide
+     plot got a 360px dash on a ~540px path and the line arrived in pieces that
+     never joined up. getTotalLength() needs the node in the document, so it is
+     measured here, after the append and before the browser has painted. */
+  for (const { line, si, drawable } of strokes) {
+    if (!drawable) continue;                    // a single point draws no stroke
+    const len = line.getTotalLength();
+    if (!Number.isFinite(len) || len <= 0) continue;
+    line.style.strokeDasharray = len;
+    line.style.strokeDashoffset = len;
+    line.style.animationDelay = si * 90 + "ms";
+    line.classList.add("m-draw");
+  }
+}
+
+function drawScatter(ctx) {
+  const { W, data, spec, grid, base, faint, surface, tip, host } = ctx;
+  const pts = data.points || [];
+  if (!pts.length) return;
+  const H = 320, padL = 66, padR = 16, padT = 16, padB = 46;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const sx = niceTicks(Math.min(...pts.map(p => p.x)), Math.max(...pts.map(p => p.x)), 5);
+  const sy = niceTicks(Math.min(...pts.map(p => p.y)), Math.max(...pts.map(p => p.y)), 5);
+  const X = v => padL + ((v - sx.lo) / (sx.hi - sx.lo)) * iw;
+  const Y = v => padT + ih - ((v - sy.lo) / (sy.hi - sy.lo)) * ih;
+
+  const FY = chartFormats(Math.max(Math.abs(sy.lo), Math.abs(sy.hi)),
+                          pts.map(p => p.y), spec.value_format);
+  const FX = chartFormats(Math.max(Math.abs(sx.lo), Math.abs(sx.hi)),
+                          pts.map(p => p.x), "number");
+
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+  for (const t of sy.ticks) {
+    svg.appendChild(svgEl("line", { x1: padL, x2: W - padR, y1: Y(t), y2: Y(t), stroke: t === 0 ? base : grid, "stroke-width": 1 }));
+    axisText(svg, padL - 9, Y(t) + 4, FY.tick(t), faint, "end", 10.5, { "font-variant-numeric": "tabular-nums" });
+  }
+  for (const t of sx.ticks) axisText(svg, X(t), H - padB + 18, FX.tick(t), faint, "middle", 10.5);
+
+  const groups = [...new Set(pts.map(p => p.s))].filter(Boolean).slice(0, 3);
+  const r = pts.length > 400 ? 3 : 4.5;
+  pts.forEach((p, i) => {
+    const color = groups.length ? SERIES()[Math.max(0, groups.indexOf(p.s)) % 8] : SERIES()[0];
+    const c = svgEl("circle", { cx: X(p.x), cy: Y(p.y), r, fill: color,
+      "fill-opacity": pts.length > 200 ? .55 : .82, stroke: surface, "stroke-width": 1.5, class: "m-pop" });
+    c.style.animationDelay = Math.min(400, i * 2) + "ms";
+    hoverMark(c, tip, host, `${esc(pretty(spec.x_label || spec.x))}: <b>${esc(fmtValue(p.x, "number"))}</b><br>${esc(pretty(spec.y_label || spec.y))}: <b>${esc(fmtValue(p.y, spec.value_format))}</b>${p.s ? "<br>" + esc(p.s) : ""}`);
+    svg.appendChild(c);
+  });
+  svg.appendChild(svgEl("line", { x1: padL, x2: W - padR, y1: padT + ih, y2: padT + ih, stroke: base, "stroke-width": 1 }));
+  axisText(svg, padL, H - 6, pretty(spec.x_label || spec.x), faint, "start", 10.5);
+  host.appendChild(svg);
+}
+
+/* ══ share — part-to-whole, as a pie ════════════════════════════════════
+   Every whole is drawn the same size so the reader compares composition rather
+   than magnitude.
+
+   Two shapes fall out of the same result:
+     one series     → one pie, slices are the categories
+     several series → one pie per x value, so the composition of each is
+                      comparable side by side rather than aggregated away
+
+   Slices are ranked and the tail folds into "Other" at the 8-colour ceiling,
+   and every slice is named with its percentage beside the pie, so identity
+   never rests on colour alone and small slices stay readable.                */
+const MAX_SHARE_SEGMENTS = 8;
+const MAX_SHARE_PIES = 12;
+const pctOf = f => (f * 100 < 9.95 ? (f * 100).toFixed(1) : String(Math.round(f * 100))) + "%";
+const TAU = Math.PI * 2;
+
+/** One slice. A lone 100% slice is a full circle, and a circle cannot be one
+    arc: an arc whose endpoints coincide has no defined centre, so SVG puts it
+    wherever the maths lands — which drew that pie half a radius off its own
+    origin and out over the controls. Two clean semicircles instead. */
+function slicePath(cx, cy, r, a0, a1) {
+  if (a1 - a0 >= TAU - 1e-6)
+    return `M${cx} ${cy - r} A${r} ${r} 0 0 1 ${cx} ${cy + r} `
+         + `A${r} ${r} 0 0 1 ${cx} ${cy - r} Z`;
+  const at = a => [cx + r * Math.cos(a - Math.PI / 2), cy + r * Math.sin(a - Math.PI / 2)];
+  const [x0, y0] = at(a0), [x1, y1] = at(a1);
+  return `M${cx} ${cy} L${x0} ${y0} A${r} ${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${x1} ${y1} Z`;
+}
+
+/** Rank, then fold the tail: past the 8 categorical slots a pie is confetti. */
+function shareSlices(pairs) {
+  let items = pairs.filter(s => isNum(s.v) && s.v > 0).sort((a, b) => b.v - a.v);
+  if (items.length > MAX_SHARE_SEGMENTS) {
+    const tail = items.slice(MAX_SHARE_SEGMENTS - 1);
+    items = items.slice(0, MAX_SHARE_SEGMENTS - 1).concat([{
+      label: `Other (${tail.length})`, v: tail.reduce((a, s) => a + s.v, 0), other: true }]);
+  }
+  return items;
+}
+
+/** Draw one pie into `svg`, returning nothing. Colours are taken by slot so a
+    category keeps its hue across every pie in a set of small multiples. */
+function paintPie(svg, ctx, items, cx, cy, r, colorOf, labelSlices) {
+  const { spec, surface, tip, host } = ctx;
+  const total = items.reduce((a, s) => a + s.v, 0);
+  if (!total) return;
+  const g = svgEl("g", { class: "m-bloom" });
+  g.style.transformOrigin = `${cx}px ${cy}px`;
+  let a0 = 0;
+  items.forEach((s, i) => {
+    const f = s.v / total, a1 = a0 + f * TAU;
+    const fill = colorOf(s, i);
+    const path = svgEl("path", { d: slicePath(cx, cy, r, a0, a1), fill,
+      stroke: surface, "stroke-width": 2 });          // 2px surface gap
+    hoverMark(path, tip, host, `<b>${esc(tidyLabel(s.label))}</b><br>`
+      + `${esc(fmtValue(s.v, spec.value_format))} · ${pctOf(f)}`);
+    g.appendChild(path);
+    // Only label a slice with room for it; the rest are named in the list.
+    if (labelSlices && f > 0.07) {
+      const mid = (a0 + a1) / 2 - Math.PI / 2, lr = r * 0.62;
+      axisText(g, cx + lr * Math.cos(mid), cy + lr * Math.sin(mid) + 4, pctOf(f),
+               inkOn(fill), "middle", 11, { "font-weight": 600 });
+    }
+    a0 = a1;
+  });
+  svg.appendChild(g);
+}
+
+function drawShare(ctx) {
+  return ctx.data.multi ? drawSharePies(ctx) : drawSharePie(ctx);
+}
+
+/** One series: a single pie of the categories, named and totalled beside it. */
+function drawSharePie(ctx) {
+  const { W, data, spec, faint, muted, host } = ctx;
+  const items = shareSlices(data.rows.map(r => ({ label: String(r.x), v: r.total })));
+  if (!items.length) {
+    host.appendChild(el("div", "no-chart", "Every value is zero or negative, so "
+      + "there is no whole to take a share of."));
+    return;
+  }
+  const total = items.reduce((a, s) => a + s.v, 0);
+  const color = (s, i) => s.other ? tok("--dim") : SERIES()[i % 8];
+
+  const r = Math.max(66, Math.min(120, W * 0.21));
+  const cx = 12 + r, cy = 14 + r;
+  const keyX = cx + r + 30, keyW = Math.max(120, W - keyX - 10);
+  const keyTop = Math.max(20, cy - (items.length * 21) / 2 + 10);
+  const H = Math.max(2 * r + 30, keyTop + items.length * 21 + 8);
+
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+  paintPie(svg, ctx, items, cx, cy, r, color, true);
+
+  // Every slice is named with its share, so identity never rests on colour and
+  // the small slices — the ones a pie hides — are still readable.
+  items.forEach((s, i) => {
+    const y = keyTop + i * 21;
+    svg.appendChild(svgEl("rect", { x: keyX, y: y - 9, width: 9, height: 9, rx: 2,
+      fill: color(s, i) }));
+    axisText(svg, keyX + 15, y, truncLabel(s.label, Math.max(10, Math.floor(keyW / 8.5))),
+             muted, "start", 11.5);
+    axisText(svg, keyX + keyW - 4, y, pctOf(s.v / total), faint, "end", 11,
+             { "font-variant-numeric": "tabular-nums" });
+  });
+  host.appendChild(svg);
+}
+
+/** Several series: one pie per x value. Aggregating the second dimension away
+    would answer a different question than the one that was asked, so the
+    compositions sit side by side instead. Colour is by series slot, so a series
+    keeps its hue across every pie and the card legend still reads. */
+function drawSharePies(ctx) {
+  const { W, data, faint, host } = ctx;
+  let rows = data.rows;
+  let dropped = 0;
+  if (rows.length > MAX_SHARE_PIES) {
+    dropped = rows.length - MAX_SHARE_PIES;
+    rows = [...rows].sort((a, b) => b.total - a.total).slice(0, MAX_SHARE_PIES);
+  }
+  const cols = Math.min(rows.length, W < 420 ? 2 : rows.length <= 3 ? rows.length : 4);
+  const gridRows = Math.ceil(rows.length / cols);
+  const cellW = W / cols, cellH = Math.min(150, Math.max(104, cellW));
+  const r = Math.max(30, Math.min(cellH / 2 - 26, cellW / 2 - 14));
+  const H = gridRows * cellH + (dropped ? 20 : 4);
+
+  const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" });
+  rows.forEach((row, i) => {
+    const cx = (i % cols) * cellW + cellW / 2;
+    const cy = Math.floor(i / cols) * cellH + r + 12;
+    // Only positive parts make up a whole; a negative has no angle to occupy.
+    const items = row.values
+      .map((v, si) => ({ label: data.names[si], v, si }))
+      .filter(s => isNum(s.v) && s.v > 0);
+    paintPie(svg, ctx, items, cx, cy, r, s => seriesColor(ctx, s.si), r >= 46);
+    axisText(svg, cx, cy + r + 17, truncLabel(row.x, Math.floor(cellW / 7)), faint,
+             "middle", 11);
+  });
+  if (dropped)
+    axisText(svg, 4, H - 4, `${dropped.toLocaleString()} more not shown — `
+      + `use Top N to choose which`, faint, "start", 10.5);
+  host.appendChild(svg);
+}
+
+/* ══ SQL highlighting ══════════════════════════════════════════════════ */
+const KW = /\b(SELECT|FROM|WHERE|GROUP BY|ORDER BY|HAVING|LIMIT|OFFSET|JOIN|LEFT|RIGHT|INNER|OUTER|FULL|CROSS|ON|AS|AND|OR|NOT|IN|IS|NULL|CASE|WHEN|THEN|ELSE|END|WITH|UNION|ALL|DISTINCT|BETWEEN|LIKE|ILIKE|ASC|DESC|OVER|PARTITION BY|QUALIFY|USING|EXISTS|FILTER|UNPIVOT|PIVOT)\b/gi;
+const FN = /\b(count|sum|avg|min|max|round|coalesce|nullif|cast|try_cast|date_trunc|extract|strftime|lower|upper|abs|median|quantile_cont|row_number|rank|dense_rank|lag|lead|stddev|regexp_matches|length|concat)\s*\(/gi;
+function highlightSQL(sql) {
+  let h = esc(sql);
+  h = h.replace(/(--[^\n]*)/g, '<span class="cm">$1</span>');
+  h = h.replace(/('(?:[^']|'')*')/g, '<span class="str">$1</span>');
+  h = h.replace(FN, m => `<span class="fn">${m.slice(0, -1)}</span>(`);
+  h = h.replace(KW, m => `<span class="kw">${m}</span>`);
+  h = h.replace(/\b(\d+\.?\d*)\b/g, '<span class="num">$1</span>');
+  return h;
+}
+
+/* ══ sidebar ═══════════════════════════════════════════════════════════ */
+function renderRail() {
+  const box = $("#railBody"); box.innerHTML = "";
+  if (state.datasets.length) {
+    box.appendChild(el("div", "rail-h", "Datasets"));
+    for (const ds of state.datasets) {
+      const b = el("button", "ds" + (state.dataset && ds.id === state.dataset.id ? " on" : ""));
+      b.appendChild(el("span", "ds-name", ds.name));
+      b.appendChild(el("span", "ds-meta", (ds.rows || 0).toLocaleString()));
+      b.addEventListener("click", () => selectDataset(ds.id));
+      box.appendChild(b);
+    }
+  }
+  const cat = state.catalog;
+  if (!cat) return;
+  if (cat.summary) {
+    box.appendChild(el("div", "rail-h", "About"));
+    box.appendChild(el("div", "ds-summary", cat.summary));
+  }
+  box.appendChild(el("div", "rail-h", `Schema · ${cat.tables.length} table${cat.tables.length===1?"":"s"}`));
+  cat.tables.forEach((t, i) => {
+    const wrap = el("div", "tbl" + (i === 0 && cat.tables.length === 1 ? " open" : ""));
+    const head = el("button", "tbl-h");
+    head.appendChild(el("span", "chev"));
+    head.appendChild(el("span", "tbl-name", t.name));
+    head.appendChild(el("span", "tbl-rows", t.rows.toLocaleString()));
+    head.addEventListener("click", () => wrap.classList.toggle("open"));
+    wrap.appendChild(head);
+    const body = el("div", "tbl-body");
+    if (t.grain) body.appendChild(el("div", "grain", "One row = " + t.grain));
+    for (const c of t.columns) {
+      const row = el("div", "col");
+      row.appendChild(el("span", "col-n", c.name));
+      row.appendChild(el("span", "role " + c.role, c.role.slice(0, 3)));
+      const bits = [c.sql_type.toLowerCase()];
+      if (c.distinct) bits.push(c.distinct.toLocaleString() + " distinct");
+      if (c.null_pct > 0) bits.push(c.null_pct.toFixed(0) + "% null");
+      if (c.samples && c.samples.length) bits.push("e.g. " + c.samples.slice(0, 2).join(", "));
+      row.title = `${c.name} — ${c.sql_type}\n${bits.join(" · ")}${c.description ? "\n\n" + c.description : ""}`;
+      body.appendChild(row);
+    }
+    wrap.appendChild(body);
+    box.appendChild(wrap);
+  });
+  if (cat.relationships.length) {
+    box.appendChild(el("div", "rail-h", "Inferred joins"));
+    for (const r of cat.relationships)
+      box.appendChild(el("div", "rel", `${r.from_table}.${r.from_column} = ${r.to_table}.${r.to_column} (${Math.round(r.overlap*100)}%)`));
+  }
+  if (cat.quality.length) {
+    box.appendChild(el("div", "rail-h", `Data quality · ${cat.quality.length}`));
+    for (const q of cat.quality.slice(0, 30)) {
+      const f = el("div", "flag " + q.severity);
+      f.appendChild(el("b", null, q.column === "*" ? q.table : `${q.table}.${q.column}`));
+      f.appendChild(el("span", null, q.detail));
+      box.appendChild(f);
+    }
+  }
+}
+
+/* ══ dataset lifecycle ═════════════════════════════════════════════════ */
+/** Upload feedback belongs in the hero, but a file can be dropped mid-thread,
+    where the hero is long gone — fall back to a banner in the thread. */
+function showUpload(html) {
+  const inHero = $("#uploadMsg");
+  if (inHero) { inHero.innerHTML = html; return; }
+  let box = $("#uploadFloat");
+  if (!box) { box = el("div"); box.id = "uploadFloat"; $("#threadIn").appendChild(box); }
+  box.innerHTML = html;
+  scrollDown();
+}
+
+async function loadDatasets() {
+  const d = await (await fetch("/api/datasets")).json();
+  state.datasets = d.datasets || [];
+  if (!d.model_configured)
+    showUpload(`<div class="banner info">No model configured, so the chat can't run.
+      Set <code>QWEN_API_URL</code> and <code>QWEN_API_KEY</code> in <code>.env</code> and restart —
+      you can still upload and browse the schema.</div>`);
+  renderRail();
+  if (state.datasets.length && !state.dataset) await selectDataset(state.datasets[0].id);
+}
+
+async function selectDataset(id) {
+  const r = await fetch("/api/datasets/" + id);
+  if (!r.ok) return;
+  const d = await r.json();
+  state.dataset = d.dataset;
+  state.catalog = d.catalog;
+  state.starters = d.dataset.starters || [];
+  $("#dsTitle").textContent = d.dataset.name;
+  $("#dsSub").textContent = `${d.dataset.tables.length} table${d.dataset.tables.length===1?"":"s"} · ${(d.dataset.rows||0).toLocaleString()} rows`;
+  $("#delBtn").hidden = false; $("#clearBtn").hidden = false;
+  $("#q").disabled = false;
+  $("#hint").textContent = "Enter to send · Shift+Enter for a new line";
+  setBusy(false);
+  renderRail();
+  resetThread();
+  $("#q").focus();
+}
+
+/** A new chat: the thread and the memory go together. Leaving the history
+    behind a cleared screen is how a bot starts answering questions nobody can
+    see any more. */
+function resetThread() {
+  state.abort?.abort();
+  state.history = [];
+  $("#threadIn").innerHTML = "";
+  const w = el("div", "hero");
+  w.style.minHeight = "auto"; w.style.paddingTop = "8vh";
+  const h = el("h1"); h.innerHTML = `Ask <em>${esc(state.dataset.name)}</em> anything`;
+  w.appendChild(h);
+  w.appendChild(el("p", null, state.catalog.summary || ""));
+  if (state.starters.length) {
+    const s = el("div", "sugs"); s.style.justifyContent = "center"; s.style.maxWidth = "620px";
+    for (const q of state.starters) {
+      const b = el("button", "sug", q); b.type = "button";
+      b.addEventListener("click", () => ask(q));
+      s.appendChild(b);
+    }
+    w.appendChild(s);
+  }
+  $("#threadIn").appendChild(w);
+}
+
+async function upload(files) {
+  if (!files || !files.length) return;
+  const fd = new FormData();
+  for (const f of files) fd.append("files", f);
+  showUpload(`<div class="banner info"><span class="spin"></span>
+    <span>Converting ${files.length} file${files.length===1?"":"s"} to DuckDB and profiling every column…</span></div>`);
+  try {
+    const r = await fetch("/api/datasets", { method: "POST", body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || "upload failed");
+    showUpload("");
+    state.dataset = null;
+    await loadDatasets();
+    await selectDataset(d.dataset.id);
+  } catch (e) {
+    showUpload(`<div class="banner error">${esc(e.message)}</div>`);
+  }
+}
+
+/* ══ a turn ════════════════════════════════════════════════════════════ */
+const STAGE_TEXT = { route:"Reading your message…", sql:"Writing the query…",
+  execute:"Running it…", repair:"That query failed — repairing it…",
+  read:"Reading the result and picking a chart…" };
+
+const ICON_EYE = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 8s2.6-4.6 7-4.6S15 8 15 8s-2.6 4.6-7 4.6S1 8 1 8Z"/><circle cx="8" cy="8" r="1.9"/></svg>';
+const ICON_SPARK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.2l2.1 6.1 6.2 2.1-6.2 2.1-2.1 6.1-2.1-6.1-6.2-2.1 6.2-2.1L12 2.2z"/></svg>';
+const ICON_SEND = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V3M3.6 7.4 8 3l4.4 4.4"/></svg>';
+const ICON_STOP = '<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><rect x="3.2" y="3.2" width="9.6" height="9.6" rx="2.2"/></svg>';
+
+/* Slots are created up front and filled as events land, so the message reads in
+   a fixed order — prose, chart, then the query behind it — however the agents
+   happen to finish. */
+const SLOTS = ["read", "answer", "viz", "detail", "sugs", "meta"];
+
+function newTurn(message) {
+  const hero = $("#threadIn").querySelector(".hero");
+  if (hero) hero.remove();
+  $("#uploadFloat")?.remove();
+
+  const u = el("div", "turn user");
+  u.appendChild(el("div", "bubble", message));
+  $("#threadIn").appendChild(u);
+
+  const b = el("div", "turn bot");
+  const av = el("div", "avatar");
+  av.innerHTML = ICON_SPARK;
+  b.appendChild(av);
+  const body = el("div", "body");
+  b.appendChild(body);
+  $("#threadIn").appendChild(b);
+
+  const live = el("div", "live");
+  live.innerHTML = '<span class="dot"></span><span class="shimmer">Thinking…</span>';
+  body.appendChild(live);
+
+  const slots = {};
+  for (const k of SLOTS) {
+    slots[k] = el("div");
+    body.appendChild(slots[k]);
+  }
+  scrollDown();
+  return { body, live, slots, detailEl: null, detailIn: null, result: null,
+           gridPlaced: false };
+}
+
+const scrollDown = () => { const t = $("#thread"); t.scrollTop = t.scrollHeight; };
+
+/** The only collapsible thing left: the query behind an answer. */
+function detail(T, label) {
+  if (!T.detailEl) {
+    const d = el("details", "work");
+    const sum = el("summary");
+    sum.innerHTML = '<span class="chev"></span><span class="lbl">Query</span>';
+    d.appendChild(sum);
+    T.detailIn = el("div", "work-in");
+    d.appendChild(T.detailIn);
+    T.slots.detail.appendChild(d);
+    T.detailEl = d;
+  }
+  if (label) T.detailEl.querySelector(".lbl").textContent = label;
+  return T.detailIn;
+}
+
+/* ══ prose ═════════════════════════════════════════════════════════════
+   The narrator writes plain sentences, but a model will reach for a bullet or
+   a **bold** figure now and then, and rendering those as literal asterisks
+   looks broken. Everything is escaped before any tag goes in.               */
+const inline = s => esc(s)
+  .replace(/`([^`]+)`/g, (m, c) => `<code>${c}</code>`)
+  .replace(/\*\*([^*]+)\*\*/g, (m, c) => `<strong>${c}</strong>`);
+
+function renderProse(text) {
+  const box = el("div", "answer");
+  String(text ?? "").trim().split(/\n{2,}/).forEach(block => {
+    const lines = block.split("\n").map(l => l.trim()).filter(Boolean);
+    if (!lines.length) return;
+    if (lines.every(l => /^[-*•]\s+/.test(l))) {
+      const ul = el("ul");
+      for (const l of lines) {
+        const li = el("li");
+        li.innerHTML = inline(l.replace(/^[-*•]\s+/, ""));
+        ul.appendChild(li);
+      }
+      box.appendChild(ul);
+    } else {
+      const p = el("p");
+      p.innerHTML = inline(lines.join(" "));
+      box.appendChild(p);
+    }
+  });
+  return box;
+}
+
+/** The rows themselves — behind the disclosure, or in the card when the chart
+    agent decided the table was the better answer. */
+function resultGrid(res, cap) {
+  cap = cap || 300;
+  const wrap = el("div", "grid-wrap");
+  const table = el("table", "grid");
+  const tr = el("tr");
+  res.columns.forEach((c, i) => {
+    const th = el("th", null, c);
+    if (res.types) th.title = res.types[i];
+    tr.appendChild(th);
+  });
+  const thead = el("thead"); thead.appendChild(tr); table.appendChild(thead);
+  const tb = el("tbody");
+  for (const row of res.rows.slice(0, cap)) {
+    const r = el("tr");
+    row.forEach(v => {
+      const td = el("td", typeof v === "number" ? "num" : (v === null ? "nil" : null));
+      td.textContent = v === null ? "null" : (typeof v === "number" ? nf.format(v) : String(v));
+      r.appendChild(td);
+    });
+    tb.appendChild(r);
+  }
+  table.appendChild(tb);
+  wrap.appendChild(table);
+  return wrap;
+}
+
+/* ══ chart card — interactive ══════════════════════════════════════════ */
+const FORM_LABEL = { bar:"Bars", hbar:"Bars ↔", grouped_bar:"Grouped", stacked_bar:"Stacked",
+                     share:"Share", line:"Line", area:"Area", scatter:"Scatter" };
+
+/** Which forms this particular result can actually support. */
+function availableForms(spec, res) {
+  const types = {}; res.columns.forEach((c, i) => types[c] = res.types[i]);
+  // Containment, not prefix — DuckDB hands back BIGINT, UBIGINT, DECIMAL(18,2).
+  // INTERVAL contains "INT" but is a duration, so it is excluded explicitly.
+  const numeric = res.columns.filter(c => {
+    const t = types[c] || "";
+    return /(INT|FLOAT|REAL|DOUBLE|DECIMAL|NUMERIC)/i.test(t) && !/^INTERVAL/i.test(t);
+  });
+  const multi = (spec.y_columns || []).length >= 2 || !!spec.series;
+  const forms = ["bar", "hbar", "line", "area"];
+  if (multi) forms.splice(2, 0, "grouped_bar", "stacked_bar");
+  if (numeric.length >= 2 && !multi) forms.push("scatter");
+
+  /* Share is only offered when a total is a real thing. Percent-of-total across
+     values that cross zero is arithmetic with no meaning — the parts can exceed
+     the whole, or the whole can be near zero and every share explodes. */
+  const measures = (multi && (spec.y_columns || []).length >= 2)
+    ? spec.y_columns : [spec.y].filter(Boolean);
+  const idx = measures.map(c => res.columns.indexOf(c)).filter(i => i >= 0);
+  const negative = idx.length && res.rows.some(r => idx.some(i => isNum(r[i]) && r[i] < 0));
+  if (idx.length && !negative && res.rows.length >= 2)
+    forms.splice(multi ? 4 : 2, 0, "share");
+  return forms;
+}
+
+function buildChart(slot, spec, res) {
+  slot.innerHTML = "";
+  const card = el("div", "viz");
+  slot.appendChild(card);
+
+  const head = el("div", "viz-head");
+  head.appendChild(el("h4", "viz-title", spec.title || "Result"));
+  if (spec.reason) head.appendChild(el("p", "viz-why", spec.reason));
+  card.appendChild(head);
+
+  // The agent said no. The head has already given its reasoning, so what
+  // follows is the shape it picked instead — a stat tile for one number, the
+  // rows themselves when the values ARE the answer. "No chart" is not the same
+  // as "nothing to look at", and the empty-eye row is only for the case where
+  // there is genuinely nothing else to put here.
+  if (!spec.should_chart) {
+    if (spec.form === "stat" && res && res.rows.length) {
+      const iy = res.columns.indexOf(spec.y);
+      const v = iy >= 0 ? res.rows[0][iy] : res.rows[0][res.rows[0].length - 1];
+      const s = el("div", "stat");
+      s.appendChild(el("div", "stat-v", fmtValue(v, spec.value_format)));
+      s.appendChild(el("div", "stat-l", pretty(spec.y || spec.title || "")));
+      card.appendChild(s);
+      card.appendChild(el("div", "viz-table"));      // breathing room below
+      return;
+    }
+    if (spec.form === "table" && res && res.rows.length) {
+      const box = el("div", "viz-table");
+      box.appendChild(resultGrid(res, 100));
+      box.appendChild(el("div", "grid-foot",
+        `${res.row_count.toLocaleString()} row${res.row_count === 1 ? "" : "s"}`
+        + (res.rows.length > 100 ? " · showing first 100" : "")));
+      card.appendChild(box);
+      return "grid";
+    }
+    const nc = el("div", "no-chart");
+    nc.innerHTML = `<span class="ic">${ICON_EYE}</span><span>${esc(spec.reason
+      || "There is nothing to plot here.")}</span>`;
+    card.appendChild(nc);
+    return;
+  }
+
+  const view = { form: spec.form, sort: spec.sort, limit: spec.limit, hidden: new Set() };
+  const forms = availableForms(spec, res);
+  if (!forms.includes(view.form)) forms.unshift(view.form);
+
+  const ctrls = el("div", "ctrls");
+  const seg = el("div", "seg");
+  forms.forEach(f => {
+    const b = el("button", view.form === f ? "on" : "", FORM_LABEL[f] || f);
+    b.type = "button";
+    b.addEventListener("click", () => {
+      view.form = f;
+      [...seg.children].forEach(c => c.classList.toggle("on", c === b));
+      draw();
+    });
+    seg.appendChild(b);
+  });
+  ctrls.appendChild(seg);
+
+  const sortSel = el("select", "mini");
+  for (const [v, t] of [["none","Query order"],["value_desc","Value ↓"],["value_asc","Value ↑"],["x_asc","Label A–Z"]]) {
+    const o = el("option", null, t); o.value = v;
+    if (view.sort === v) o.selected = true;
+    sortSel.appendChild(o);
+  }
+  sortSel.addEventListener("change", () => { view.sort = sortSel.value; draw(); });
+  ctrls.appendChild(sortSel);
+
+  const distinctX = new Set(res.rows.map(r => String(r[res.columns.indexOf(spec.x)]))).size;
+  if (distinctX > 8) {
+    const topSel = el("select", "mini");
+    for (const n of [0, 10, 20, 30, 50, 100].filter(n => n === 0 || n < distinctX)) {
+      const o = el("option", null, n === 0 ? `All ${distinctX}` : `Top ${n}`); o.value = n;
+      if ((view.limit || 0) === n) o.selected = true;
+      topSel.appendChild(o);
+    }
+    topSel.addEventListener("change", () => {
+      view.limit = Number(topSel.value);
+      if (view.limit && view.sort === "none") { view.sort = "value_desc"; sortSel.value = "value_desc"; }
+      draw();
+    });
+    ctrls.appendChild(topSel);
+  }
+
+  ctrls.appendChild(el("span", "ctrl-sp"));
+  const csv = el("button", "pill", "CSV");
+  csv.type = "button"; csv.style.height = "26px"; csv.style.fontSize = "11.5px";
+  csv.addEventListener("click", () => {
+    window.location = `/api/datasets/${state.dataset.id}/export?sql=${encodeURIComponent(res.__sql || "")}`;
+  });
+  if (res.__sql) ctrls.appendChild(csv);
+  card.appendChild(ctrls);
+
+  const legend = el("div", "legend");
+  card.appendChild(legend);
+  const host = el("div", "chart-host");
+  card.appendChild(host);
+
+  const notesBox = el("div");
+  card.appendChild(notesBox);
+
+  function draw() {
+    const data = renderChart(host, spec, res, view);
+    legend.innerHTML = "";
+    if (data && data.multi && data.allNames.length > 1) {
+      data.allNames.forEach((n, i) => {
+        const item = el("button", "lg" + (view.hidden.has(n) ? " off" : ""));
+        item.type = "button";
+        const sw = el("i"); sw.style.background = SERIES()[i % 8];
+        item.appendChild(sw);
+        item.appendChild(el("span", null, pretty(n)));
+        item.title = "Click to show or hide this series";
+        item.addEventListener("click", () => {
+          if (view.hidden.has(n)) view.hidden.delete(n);
+          else if (view.hidden.size < data.allNames.length - 1) view.hidden.add(n);
+          draw();
+        });
+        legend.appendChild(item);
+      });
+    }
+    notesBox.innerHTML = "";
+    // The reconciler's notes describe the chart it chose. Most stay true when
+    // the reader switches form, but the palette note does not: a share pie
+    // colours every slice separately, so "using a single hue" would be sitting
+    // under a chart that visibly does the opposite.
+    const notes = [...(spec.notes || [])].filter(
+      n => !(view.form === "share" && /single hue/i.test(n)));
+    if (data && data.folded) notes.push(`${data.folded.toLocaleString()} lower-ranked categories are not shown.`);
+    if (notes.length) {
+      const adj = el("div", "adjust");
+      adj.innerHTML = "<b>Adjusted against the data</b>" + notes.map(esc).join("<br>");
+      notesBox.appendChild(adj);
+    }
+  }
+  draw();
+
+  if (window.ResizeObserver) {
+    let w = host.clientWidth;
+    new ResizeObserver(() => {
+      if (Math.abs(host.clientWidth - w) > 24) { w = host.clientWidth; draw(); }
+    }).observe(host);
+  }
+}
+
+/* ══ one turn, streamed ════════════════════════════════════════════════
+   POST rather than EventSource: a turn carries the conversation with it, which
+   does not belong in a query string, and an AbortController gives the composer
+   a real stop button.                                                       */
+async function ask(message) {
+  if (state.busy || !state.dataset) return;
+  message = String(message).trim();
+  if (!message) return;
+  $("#q").value = ""; autosize();
+
+  const T = newTurn(message);
+  const turn = { question: message, answer: "", sql: "", columns: [] };
+  const ctrl = new AbortController();
+  state.abort = ctrl;
+  setBusy(true);
+
+  const setLive = txt => {
+    const s = T.live.querySelector(".shimmer");
+    if (s) s.textContent = txt;
+  };
+
+  try {
+    const r = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dataset: state.dataset.id, message,
+                             history: state.history.slice(-HISTORY_SENT) }),
+      signal: ctrl.signal,
+    });
+    if (!r.ok || !r.body) throw new Error(`the server returned ${r.status}`);
+
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        let e; try { e = JSON.parse(line); } catch { continue; }
+        applyEvent(T, turn, e, setLive);
+      }
+    }
+  } catch (err) {
+    if (err.name === "AbortError")
+      T.slots.meta.appendChild(el("div", "runmeta", "Stopped."));
+    else
+      T.slots.answer.appendChild(el("div", "banner error",
+        err.message || "The connection to the server dropped."));
+  } finally {
+    T.live.remove();
+    if (T.detailEl) T.detailEl.open = false;
+    // Rows stay reachable even if the chart agent never answered.
+    if (T.result && !T.gridPlaced) {
+      detail(T).appendChild(resultGrid(T.result));
+      T.gridPlaced = true;
+    }
+    if (turn.answer || turn.sql) state.history.push(turn);
+    state.abort = null;
+    setBusy(false);
+    scrollDown();
+    $("#q").focus();
+  }
+}
+
+function applyEvent(T, turn, e, setLive) {
+  switch (e.type) {
+    case "status": setLive(STAGE_TEXT[e.stage] || e.stage); break;
+
+    case "route": {
+      // Worth showing only when the router resolved a reference for you —
+      // "and by zone?" becoming a whole question is the bit that reads as magic
+      // when it works and as a mystery when it doesn't.
+      const q = (e.question || "").trim();
+      if (e.mode !== "data" || !q || q.toLowerCase() === turn.question.toLowerCase()) break;
+      T.slots.read.appendChild(el("div", "runmeta", "Read as: " + q));
+      break;
+    }
+    case "answer": {
+      turn.answer = e.answer || "";
+      T.slots.answer.innerHTML = "";
+      T.slots.answer.appendChild(renderProse(e.answer));
+      scrollDown(); break;
+    }
+    case "sql": {
+      const box = detail(T);
+      const pre = el("pre", "sql");
+      pre.innerHTML = highlightSQL(e.sql);
+      box.appendChild(pre);
+      break;
+    }
+    case "sql_error": {
+      const r = el("div", "repair");
+      r.innerHTML = `<b>attempt ${e.attempt}</b><span>${esc(e.error)}</span>`;
+      detail(T).appendChild(r);
+      break;
+    }
+    case "repair": {
+      const r = el("div", "repair");
+      r.innerHTML = `<b>repaired</b><span>${esc(e.diagnosis || "")}</span>`;
+      detail(T).appendChild(r);
+      break;
+    }
+    case "result": {
+      T.result = e;
+      e.__sql = e.sql;                       // the CSV export reruns this
+      turn.sql = e.sql || "";
+      turn.columns = e.columns || [];
+      detail(T, `Query · ${e.row_count.toLocaleString()} row${e.row_count===1?"":"s"}`);
+      T.detailIn.appendChild(el("div", "grid-foot",
+        `${e.elapsed_ms} ms${e.truncated ? " · capped at 5,000 rows" : ""}`));
+      break;
+    }
+    case "chart": {
+      const shown = buildChart(T.slots.viz, e, T.result);
+      // The card is showing the rows itself; no need for a second copy.
+      if (shown === "grid") T.gridPlaced = true;
+      else if (T.result && !T.gridPlaced) {
+        detail(T).appendChild(resultGrid(T.result));
+        T.gridPlaced = true;
+      }
+      scrollDown(); break;
+    }
+    case "suggestions": {
+      if (!e.questions?.length) break;
+      const box = el("div", "sugs");
+      for (const q of e.questions) {
+        const b = el("button", "sug", q);
+        b.type = "button";
+        b.addEventListener("click", () => ask(q));
+        box.appendChild(b);
+      }
+      T.slots.sugs.appendChild(box);
+      scrollDown(); break;
+    }
+    case "metrics": {
+      if (!turn.sql) break;               // small talk does not need a receipt
+      T.slots.meta.appendChild(el("div", "runmeta",
+        `${(e.elapsed_ms / 1000).toFixed(1)}s · ${e.calls} model call${e.calls===1?"":"s"}`
+        + (e.repairs ? ` · ${e.repairs} repair${e.repairs===1?"":"s"}` : "")));
+      break;
+    }
+    case "error": {
+      T.slots.answer.appendChild(el("div", "banner error", e.message));
+      scrollDown(); break;
+    }
+    case "note": break;                   // internal; the disclosure is enough
+  }
+}
+
+/* ══ wiring ════════════════════════════════════════════════════════════ */
+const qBox = $("#q");
+function autosize() { qBox.style.height = "auto"; qBox.style.height = Math.min(190, qBox.scrollHeight) + "px"; }
+
+/** While a turn is in flight the send button becomes a stop button — a chat
+    where the only way out of a slow answer is a page reload is a bad chat. */
+function setBusy(busy) {
+  state.busy = busy;
+  const btn = $("#sendBtn");
+  btn.classList.toggle("stop", busy);
+  btn.innerHTML = busy ? ICON_STOP : ICON_SEND;
+  btn.setAttribute("aria-label", busy ? "Stop" : "Send");
+  btn.title = busy ? "Stop" : "Send";
+  btn.disabled = !state.dataset;
+}
+
+qBox.addEventListener("input", autosize);
+qBox.addEventListener("keydown", ev => {
+  if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); if (!state.busy) ask(qBox.value); }
+});
+$("#askForm").addEventListener("submit", ev => {
+  ev.preventDefault();
+  if (state.busy) { state.abort?.abort(); return; }
+  ask(qBox.value);
+});
+$("#drop").addEventListener("click", () => $("#file").click());
+$("#drop").addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); $("#file").click(); } });
+$("#file").addEventListener("change", ev => upload(ev.target.files));
+$("#newBtn").addEventListener("click", () => $("#file").click());
+$("#clearBtn").addEventListener("click", () => resetThread());
+$("#delBtn").addEventListener("click", async () => {
+  if (!state.dataset) return;
+  state.abort?.abort();
+  await fetch("/api/datasets/" + state.dataset.id, { method: "DELETE" });
+  location.reload();
+});
+const railBtn = $("#railToggle"), railOpen = $("#railOpen");
+function toggleRail() {
+  const closed = document.body.classList.toggle("rail-closed");
+  document.body.classList.toggle("rail-open", !closed);
+  railOpen.style.display = closed ? "grid" : "none";
+}
+railBtn.addEventListener("click", toggleRail);
+railOpen.addEventListener("click", toggleRail);
+
+for (const t of ["dragenter", "dragover"])
+  document.addEventListener(t, ev => { ev.preventDefault(); $("#drop")?.classList.add("over"); });
+for (const t of ["dragleave", "drop"])
+  document.addEventListener(t, ev => { ev.preventDefault();
+    if (t === "dragleave" && ev.relatedTarget) return; $("#drop")?.classList.remove("over"); });
+document.addEventListener("drop", ev => { if (ev.dataTransfer?.files.length) upload(ev.dataTransfer.files); });
+
+loadDatasets();
+</script>
+</body>
+</html>
