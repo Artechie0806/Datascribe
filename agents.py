@@ -37,24 +37,56 @@ from typing import Callable
 import context as ctx
 from context import Budget
 from llm import QwenClient
-from models import (Catalog, ChartSpec, Exchange, Metrics, QueryResult, Route)
+from models import (Catalog, ChartSpec, Exchange, Metrics, QueryResult, Route,
+                    SQLAttempt)
 from profiler import is_numeric, is_temporal
 
 Emit = Callable[[dict], None]
 
 # Output reserves per call — what we leave in the window for the reply.
-ROUTE_OUTPUT = 700
-SQL_OUTPUT = 700
-REPAIR_OUTPUT = 700
-CHART_OUTPUT = 500
+#
+# These were sized for a model that answers the moment it is asked. A small
+# local model writes a rationale first (see the field order in the schemas
+# below), and anything it does not finish inside the reserve comes back cut in
+# half — a CTE missing its last clause parses as a syntax error three layers
+# away from the cause. Reserving more costs nothing when it goes unused: the
+# cap bounds generation, it does not spend it.
+ROUTE_OUTPUT = 900
+SQL_OUTPUT = 1400
+REPAIR_OUTPUT = 1400
+CHART_OUTPUT = 700
 NARRATE_OUTPUT = 900
-SUGGEST_OUTPUT = 350
+SUGGEST_OUTPUT = 500
 
 HISTORY_TURNS = 6       # how much of the conversation the router reads back
 
 MAX_SERIES = 8          # categorical token ceiling
 MAX_ALL_PAIRS_SERIES = 3   # scatter/bubble: every pair is adjacent, so cap lower
 MAX_CATEGORIES = 30     # bars past this fold into a labelled tail
+
+
+# Small models know "SQL" but not DuckDB, so they reach for a Postgres or Spark
+# function that does not exist here and the repair loop then spends its whole
+# budget re-inventing the same missing function. These are the handful they
+# actually get wrong on this codebase's workloads; naming them once up front is
+# cheaper than three failed EXPLAINs.
+DUCKDB_NOTES = textwrap.dedent("""
+    DuckDB idioms — use these, they exist; do not invent alternatives:
+    - Split a delimited cell into rows. STRING_SPLIT returns a list and UNNEST
+      expands it; there is no generate_series-over-array dance. In FROM, name
+      the result or the column is called "value" and nothing else can see it:
+          SELECT TRIM(c.country) AS country, COUNT(*) AS n
+          FROM titles t, UNNEST(STRING_SPLIT(t.country, ',')) AS c(country)
+          GROUP BY 1
+      Group and order by the ALIAS or by position, never by the raw expression.
+    - Dates: YEAR(d), MONTH(d), DATE_TRUNC('month', d), STRFTIME(d, '%Y-%m').
+      Text that holds a date needs TRY_CAST(col AS DATE) or STRPTIME first.
+    - Safe maths: TRY_CAST(col AS DOUBLE), NULLIF(denominator, 0), COALESCE.
+    - Top N per group: QUALIFY ROW_NUMBER() OVER (PARTITION BY g ORDER BY m
+      DESC) <= 3 — QUALIFY works directly, no wrapping subquery needed.
+    - Text: ILIKE for case-insensitive matching, REGEXP_EXTRACT, STRING_AGG.
+    - A column alias defined in SELECT can be reused in GROUP BY and ORDER BY.
+""").strip()
 
 
 class Agent:
@@ -229,12 +261,20 @@ SQL_SYSTEM = textwrap.dedent("""
     - This is a conversation. If the previous query is shown and the question is
       a variation on it, keep its filters, aliases and definitions and change
       only what was asked — a follow-up should not silently redefine the metric.
-""").strip()
+    - Keep `explanation` to ONE short sentence. It is there to let you settle on
+      an approach before you write the query, not to document it — every token
+      spent there is a token the query itself may need.
+""").strip() + "\n\n" + DUCKDB_NOTES
 
+# Field order is load-bearing under constrained decoding. A grammar that forces
+# `{"sql":` as the first token makes the model commit to a query before it has
+# worked anything out, and a small model answers measurably worse for it —
+# reaching for a window function where the question wanted a CASE pivot.
+# Declaring the rationale first gives it somewhere to think inside the JSON.
 SQL_SCHEMA = {
     "type": "object",
-    "properties": {"sql": {"type": "string"}, "explanation": {"type": "string"}},
-    "required": ["sql"],
+    "properties": {"explanation": {"type": "string"}, "sql": {"type": "string"}},
+    "required": ["explanation", "sql"],
 }
 
 _FENCE = re.compile(r"^```(?:sql)?\s*|\s*```$", re.IGNORECASE | re.MULTILINE)
@@ -276,12 +316,15 @@ REPAIR_SYSTEM = textwrap.dedent("""
     - Keep the query answering the same question at the same grain.
     - Still one read-only DuckDB SELECT, no semicolon.
     - In `diagnosis`, say in one sentence what was wrong.
-""").strip()
+    - If a function does not exist, it will not exist on the next attempt
+      either. Do not re-send it under a different spelling — reach for a
+      different construction entirely.
+""").strip() + "\n\n" + DUCKDB_NOTES
 
 REPAIR_SCHEMA = {
     "type": "object",
-    "properties": {"sql": {"type": "string"}, "diagnosis": {"type": "string"}},
-    "required": ["sql", "diagnosis"],
+    "properties": {"diagnosis": {"type": "string"}, "sql": {"type": "string"}},
+    "required": ["diagnosis", "sql"],
 }
 
 
@@ -289,10 +332,22 @@ class SQLCriticAgent(Agent):
     name = "sql-critic"
 
     def run(self, question: str, route: Route, catalog: Catalog, sql: str,
-            error: str) -> tuple[str, str]:
+            error: str,
+            earlier: list[SQLAttempt] | None = None) -> tuple[str, str]:
         fixed = (f"Question: {question}\n\n"
                  f"Query that failed:\n{sql}\n\n"
-                 f"DuckDB said:\n{error}\n\nSchema:\n")
+                 f"DuckDB said:\n{error}\n\n")
+        # Without this the critic only ever sees the newest failure, so on a
+        # missing function it re-proposes the same missing function and the
+        # repair budget is spent going round in a circle.
+        dead_ends = [a for a in (earlier or []) if not a.ok and a.sql.strip() != sql.strip()]
+        if dead_ends:
+            fixed += ("Already tried and rejected — do not go back to any of "
+                      "these:\n" + "\n".join(
+                          f"  - {a.sql.strip()[:300]}\n    failed with: "
+                          f"{(a.error or '').splitlines()[0][:160]}"
+                          for a in dead_ends[-3:]) + "\n\n")
+        fixed += "Schema:\n"
         room = self.budget.room_for(REPAIR_OUTPUT,
                                     self._overhead(REPAIR_SYSTEM, fixed))
         schema_text = ctx.focus_schema(catalog, route.tables, room)
@@ -369,8 +424,8 @@ CHART_SYSTEM = textwrap.dedent("""
 CHART_SCHEMA = {
     "type": "object",
     "properties": {
-        "should_chart": {"type": "boolean"},
         "reason": {"type": "string"},
+        "should_chart": {"type": "boolean"},
         "form": {"type": "string",
                  "enum": ["line", "area", "bar", "hbar", "grouped_bar",
                           "stacked_bar", "share", "scatter", "stat", "table"]},
@@ -389,7 +444,7 @@ CHART_SCHEMA = {
         "sort": {"type": "string",
                  "enum": ["none", "value_desc", "value_asc", "x_asc"]},
     },
-    "required": ["should_chart", "reason", "form"],
+    "required": ["reason", "should_chart", "form"],
 }
 
 
@@ -694,9 +749,12 @@ NARRATOR_SYSTEM = textwrap.dedent("""
       shape, the outlier, the comparison that matters. Stop there. This is a
       chat message, not a report: no headings, no preamble, no sign-off, and no
       bullet list unless you are naming three or more items.
-    - Every number you write must come from the rows you were given. Quote it to
-      at most two decimal places — 324676.71000000014 is floating-point noise and
-      should be written 324676.71 — but never restate a figure as a different
+    - Every number you write must come from the rows you were given. Copy it
+      digit for digit. The only change you may make is to cut the decimals to
+      two — 324676.71000000014 is floating-point noise and should be written
+      324676.71. You may group thousands with commas in a number of four digits
+      or more, and that is all: do not move a decimal point, do not drop one,
+      and do not turn 69.62 into 6,962. Never restate a figure as a different
       number, never estimate, and never add a number the query did not return.
       There is no number you are allowed to work out in your head.
     - CHECK THE COLUMN HEADER OF EVERY FIGURE YOU QUOTE. When the result has
@@ -723,6 +781,68 @@ NARRATE_SCHEMA = {
 }
 
 
+_NUMBER = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+
+# Prose counts a reader writes without reading them off a row: "the top 3",
+# "both types", "all 4 regions". Flagging those as ungrounded is noise.
+PROSE_COUNT_CEILING = 12
+
+
+def _figures(text: str) -> list[tuple[str, float, int]]:
+    """Every number in the text, as (as-written, value, decimals written)."""
+    out = []
+    for m in _NUMBER.finditer(text or ""):
+        raw = m.group()
+        try:
+            value = float(raw.replace(",", ""))
+        except ValueError:
+            continue
+        decimals = len(raw.split(".")[1]) if "." in raw else 0
+        out.append((raw, value, decimals))
+    return out
+
+
+def _grounded_values(result: QueryResult) -> list[float]:
+    """Every number the narrator is allowed to quote: the cells it was shown,
+    plus the row count, which it is told separately."""
+    values: list[float] = [float(result.row_count)]
+    for row in result.rows:
+        for v in row:
+            if v is None or isinstance(v, bool):
+                continue
+            if isinstance(v, (int, float)):
+                values.append(float(v))
+            else:
+                for _, value, _ in _figures(str(v)):
+                    values.append(value)
+    return values
+
+
+def ungrounded_figures(answer: str, result: QueryResult,
+                       question: str = "") -> list[str]:
+    """Numbers in the reply that are in no cell it was given.
+
+    A frontier model transcribes a column of figures without dropping one; a 9B
+    model writes 69.62 as "6,962" often enough to matter, and a wrong number
+    stated confidently is the one failure this app cannot ship. The check is
+    deliberately generous — a figure counts as grounded if it matches a cell at
+    the precision it was written to, so rounding 69.618 to 69.62 is fine and
+    inventing 6,962 is not."""
+    grounded = _grounded_values(result)
+    asked = {value for _, value, _ in _figures(question)}
+    bad: list[str] = []
+    for raw, value, decimals in _figures(answer):
+        if value in asked:
+            continue
+        if decimals == 0 and value.is_integer() and abs(value) <= PROSE_COUNT_CEILING:
+            continue
+        if any(round(cell, decimals) == round(value, decimals)
+               for cell in grounded):
+            continue
+        bad.append(raw)
+    return bad
+
+
 class NarratorAgent(Agent):
     name = "narrator"
 
@@ -734,10 +854,37 @@ class NarratorAgent(Agent):
         room = self.budget.room_for(NARRATE_OUTPUT,
                                     self._overhead(NARRATOR_SYSTEM, fixed))
         rows = ctx.fit_rows(result, room)
+        user = fixed + rows
 
-        data = self._call(NARRATOR_SYSTEM, fixed + rows, NARRATE_SCHEMA,
+        data = self._call(NARRATOR_SYSTEM, user, NARRATE_SCHEMA,
                           NARRATE_OUTPUT, temperature=0.2)
-        return str(data.get("answer", "")).strip()
+        answer = str(data.get("answer", "")).strip()
+
+        # One bounded second look, and only when a figure is actually adrift.
+        # Told which number is wrong, the model fixes it; asked to "check your
+        # work", it rewrites the sentence around the same wrong number.
+        bad = ungrounded_figures(answer, result, question)
+        if not bad:
+            return answer
+        self.emit({"type": "note", "agent": self.name,
+                   "message": f"Checking {', '.join(bad[:4])} against the rows — "
+                              f"no cell holds that figure."})
+        retry = self._call(
+            NARRATOR_SYSTEM,
+            f"{user}\n\nYour draft was:\n{answer}\n\n"
+            f"These figures appear in it and in NO cell above: "
+            f"{', '.join(bad)}. Write the reply again, quoting only figures "
+            f"that are in the rows, copied digit for digit.",
+            NARRATE_SCHEMA, NARRATE_OUTPUT, temperature=0.0)
+        second = str(retry.get("answer", "")).strip()
+        if second and not ungrounded_figures(second, result, question):
+            return second
+        # Both drafts are shaky; the first is at least the one that read the
+        # question. Say so rather than passing a bad figure off as checked.
+        self.emit({"type": "note", "agent": self.name,
+                   "message": "Could not ground every figure in the reply — "
+                              "read the table below for the exact values."})
+        return second or answer
 
 
 # --- 6. Suggester -----------------------------------------------------------

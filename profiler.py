@@ -20,6 +20,7 @@ catalog is still complete and the pipeline still works — it just reads drier.
 from __future__ import annotations
 
 import json
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 
@@ -384,7 +385,10 @@ _SUMMARY_SCHEMA = {
     "required": ["summary"],
 }
 
-DESCRIBE_WORKERS = 4
+# One local server means one model instance: four concurrent describe calls do
+# not run four times faster, they queue — and on a small GPU they compete for
+# the same KV cache. Tune with LLM_DESCRIBE_WORKERS.
+DESCRIBE_WORKERS = max(1, int(os.getenv("LLM_DESCRIBE_WORKERS", "2")))
 MAX_DESCRIBED_COLUMNS = 60
 
 

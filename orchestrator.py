@@ -90,7 +90,8 @@ class ChatPipeline:
                 m.repairs += 1
                 emit({"type": "status", "stage": "repair", "attempt": n + 1})
                 repaired, diagnosis = agents["critic"].run(
-                    question, route, self.catalog, current, error)
+                    question, route, self.catalog, current, error,
+                    earlier=attempts[:-1])
                 if not repaired or repaired.strip() == current.strip():
                     return None, current, attempts
                 attempts[-1].critique = diagnosis

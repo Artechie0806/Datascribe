@@ -27,6 +27,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from llm import CONTEXT_WINDOW as LLM_CONTEXT
 from models import Catalog, QueryResult, TableProfile
 
 CHARS_PER_TOKEN = 3.8      # conservative for English + SQL identifiers
@@ -186,7 +187,14 @@ def _cell(v) -> str:
 
 @dataclass
 class Budget:
-    max_context: int = 16000
+    """How much window there is to spend, and on what.
+
+    `max_context` defaults to whatever the server was configured with (LLM_CONTEXT
+    in .env), because guessing low is not free: a 16k default against a 50k
+    window degrades a twelve-table schema down to name-and-row-count stubs, and
+    the router then picks tables by their names alone."""
+
+    max_context: int = LLM_CONTEXT
     safety_margin: int = 500
 
     def input_allowance(self, output_tokens: int) -> int:

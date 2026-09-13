@@ -40,7 +40,7 @@ from pydantic import BaseModel, Field
 import profiler
 from agents import SuggestAgent, suggest_offline
 from context import Budget
-from llm import QwenClient
+from llm import CONTEXT_WINDOW, QwenClient
 from models import Exchange, Metrics
 from orchestrator import ChatPipeline
 from warehouse import SUPPORTED, IngestError, QueryError, Warehouse, guard, ingest
@@ -68,7 +68,7 @@ class ChatRequest(BaseModel):
     dataset: str
     message: str
     history: list[Turn] = Field(default_factory=list)
-    max_context: int = 16000
+    max_context: int = 0        # 0 = whatever LLM_CONTEXT says
     max_repairs: int = 3
 
 
@@ -107,7 +107,21 @@ def _open(dataset_id: str) -> tuple[Warehouse, "profiler.Catalog", dict]:
 
 
 def _has_model() -> bool:
-    return bool(os.getenv("QWEN_API_KEY") or os.getenv("QWEN_API_URL"))
+    return bool(os.getenv("LLM_API_URL") or os.getenv("LLM_API_KEY")
+                or os.getenv("QWEN_API_KEY") or os.getenv("QWEN_API_URL"))
+
+
+@app.get("/api/model")
+def model_status() -> dict:
+    """What the app is pointed at, and whether it answers.
+
+    Worth one endpoint: with a local server the usual failure is not a bad
+    prompt, it is LM Studio not running, or running with the wrong model
+    loaded, and that is invisible until the first question dies."""
+    if not _has_model():
+        return {"configured": False}
+    status = QwenClient().health()
+    return {"configured": True, "context_window": CONTEXT_WINDOW, **status}
 
 
 # --- pages ------------------------------------------------------------------
@@ -287,8 +301,8 @@ async def chat(request: Request, body: ChatRequest):
 
     message = body.message.strip()
     if not _has_model():
-        return fail("No model configured. Set QWEN_API_URL and QWEN_API_KEY in "
-                    ".env, then restart the server.")
+        return fail("No model configured. Set LLM_API_URL (and LLM_MODEL if "
+                    "your server needs one) in .env, then restart the server.")
     if not message:
         return fail("Say something about the data.")
 
@@ -300,7 +314,7 @@ async def chat(request: Request, body: ChatRequest):
     history = [Exchange(question=t.question, answer=t.answer, sql=t.sql,
                         columns=list(t.columns))
                for t in body.history[-HISTORY_TURNS:] if t.question]
-    max_context = max(4000, min(body.max_context, 200000))
+    max_context = max(4000, min(body.max_context or CONTEXT_WINDOW, 200000))
     queue: asyncio.Queue = asyncio.Queue()
     loop = asyncio.get_running_loop()
 

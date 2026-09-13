@@ -27,18 +27,22 @@ uvicorn server:app --reload
 
 ```ini
 # .env
-QWEN_API_URL=https://your-wrapper.example.com   # a self-hosted Qwen endpoint
-QWEN_API_KEY=...                                # the api-key it expects
-DATA_DIR=./data                                 # where warehouses live   (optional)
-MAX_UPLOAD_MB=512                               # per-upload ceiling      (optional)
+LLM_API_URL=http://127.0.0.1:1234   # LM Studio; Ollama 11434, llama.cpp 8080
+LLM_MODEL=qwen/qwen3.5-9b           # optional — /v1/models is asked if unset
+LLM_CONTEXT=46000                   # the window your server was STARTED with
+LLM_REASONING_EFFORT=none           # see "Running on a small local model"
+DATA_DIR=./data                     # where warehouses live        (optional)
+MAX_UPLOAD_MB=512                   # per-upload ceiling           (optional)
 ```
 
-Open <http://127.0.0.1:8000> and drop a file on the page.
+Open <http://127.0.0.1:8000> and drop a file on the page. `GET /api/model` tells
+you what the app is actually pointed at, which is the first thing to check when
+a local server is involved.
 
-> **The model.** DataScribe talks to a self-hosted **Qwen** wrapper exposing a single
-> `POST /chat/text` endpoint — no vendor SDK, no tool-calling, no structured-output
-> mode. `llm.py` folds each agent's schema into the prompt and parses JSON back out
-> of the reply, so pointing it at a different backend means rewriting one small file.
+> **The model.** DataScribe talks to any **OpenAI-compatible** `/v1/chat/completions`
+> endpoint — LM Studio, llama.cpp, Ollama, vLLM, or a hosted one. No vendor SDK.
+> It is built to run on a **small local model**: a 9B is the target, not the
+> fallback. See [Running on a small local model](#running-on-a-small-local-model).
 >
 > Without a model configured you can still upload a file and browse everything the
 > profiler derived; only the chat needs the LLM.
@@ -267,6 +271,79 @@ labels printed on a fill take their ink from that fill's luminance.
 
 ---
 
+## Running on a small local model
+
+A 9B model is not a small frontier model; it fails in its own specific ways, and
+all of them are cheaper to engineer around than to prompt around. Everything
+here is measured against `qwen/qwen3.5-9b` in LM Studio.
+
+**It thinks the budget away.** A Qwen3-class model emits a reasoning block
+before its answer and bills it to the same `max_tokens` as the answer. Ask it
+for a two-field routing decision in 700 tokens and it returns
+`finish_reason: "length"` with an *empty* `content` — 700 tokens of reasoning,
+no reply. Downstream that surfaced as `RuntimeError: model did not return valid
+JSON: no JSON object in model reply`, which is true and useless: there was no
+reply to find JSON in. Three fixes, all in `llm.py`:
+
+- `reasoning_effort` is sent on every call (`LLM_REASONING_EFFORT`, default
+  `none`). On this workload `low` spent 400–2500 tokens and ~30s per call to
+  arrive at the same JSON `none` reaches in 3s.
+- the generation cap is no longer the caller's context reserve. Those are
+  different numbers — the reserve is how much room the *answer* needs,
+  `max_tokens` also has to cover whatever the model thinks first — so it is
+  floored at `LLM_MIN_OUTPUT` and capped at `LLM_MAX_OUTPUT`.
+- a truncated reply is retried with **twice** the room, not re-asked at the same
+  size. Re-asking is how one failure becomes three.
+
+**It writes JSON by hand, badly.** Raw newlines inside a string (a formatted
+multi-line `SELECT` is the usual culprit), trailing commas, ```json fences,
+"Here is the JSON:", Python `True`/`None`. So the server is asked to constrain
+decoding to the schema — `response_format: json_schema` — which makes invalid
+JSON unrepresentable rather than unlikely. Where that is unavailable the reply
+is repaired (control characters escaped, brackets closed, literals fixed) and
+then, failing that, salvaged field by field; a bare ```sql fence with no wrapper
+around it still yields a query. Capabilities are probed by use: a server that
+rejects `response_format`, `reasoning_effort` or `model` has that feature turned
+off for the rest of the process and the call retried, so a plain endpoint with
+none of them still works.
+
+**Constrained decoding makes it dumber.** This one is easy to miss. With a
+grammar forcing the first token to be `{"sql":`, the model has to start
+answering before it has worked anything out, and the SQL gets worse — asked to
+compare June to May it reached for a `LAG` window function over the wrong
+partition. Given the *same* schema with `explanation` declared first, it wrote
+the `CASE WHEN` pivot the question actually wanted. So the schemas in
+`agents.py` declare their rationale field first, and the model reasons inside
+its own JSON. Field order is load-bearing; do not tidy it.
+
+**It does not know DuckDB.** It knows "SQL", then reaches for a Postgres or
+Spark function that does not exist here — and the repair loop spends its entire
+budget re-inventing the same missing function, because the critic only ever saw
+the newest failure. `DUCKDB_NOTES` names the handful it actually gets wrong
+(`UNNEST(STRING_SPLIT(...))`, `QUALIFY`, `STRFTIME`, `TRY_CAST`), and the critic
+is now shown every dead end so far and told not to return to one.
+
+**It fumbles transcription.** Handed a cell reading `69.62` it will write
+"6,962%" — a wrong number, stated with complete confidence, which is the one
+failure this app cannot ship. Every figure in the narrator's reply is now
+checked against the cells it was shown (`ungrounded_figures()`); a figure that
+is in no cell buys one bounded rewrite naming the offending number, and if the
+second draft is no better the reply says so rather than passing it off as
+checked.
+
+The result on the sample dataset: small talk one call and ~1.6s, a full data
+turn five calls and ~6-8s, and no JSON parse failures.
+
+### Tuning
+
+| Setting | Default | Raise it when |
+| --- | --- | --- |
+| `LLM_CONTEXT` | 16000 | your server holds more — this is what sizes every prompt, so a low value silently degrades the schema the router sees |
+| `LLM_MIN_OUTPUT` | 1024 | replies come back truncated |
+| `LLM_MAX_OUTPUT` | 4096 | a wide table's description needs more |
+| `LLM_REASONING_EFFORT` | `none` | you have latency to spare and want a second opinion on hard SQL |
+| `LLM_DESCRIBE_WORKERS` | 2 | your server really does serve requests in parallel |
+
 ## Context budgeting
 
 An uploaded workbook can carry forty tables and three hundred columns, which does
@@ -317,7 +394,8 @@ warehouse.py     upload → DuckDB; guarded, capped, timed read-only execution
 profiler.py      statistical + semantic catalog — this is what replaces the dictionary
 models.py        dataclasses (Catalog, Exchange, Route, QueryResult, ChartSpec, TurnResult)
 context.py       token budgeting: fit_schema / focus_schema / fit_rows
-llm.py           client for the self-hosted Qwen wrapper (/chat/text)
+llm.py           OpenAI-compatible client: constrained decoding, JSON repair/salvage,
+                 reasoning-budget control, capability probing
 agents.py        router, SQL author, SQL critic, chart, narrator, suggest + reconcile_chart()
 orchestrator.py  one chat turn, streaming every step as an event
 server.py        FastAPI: upload, catalog, preview, CSV export, streamed chat
@@ -326,11 +404,12 @@ index.html       the chat: dropzone, schema rail, live SVG charts, query disclos
 
 ## Known limits
 
-- **Nothing verifies the numbers in the reply.** The narrator is given the rows
-  and told every figure must come from them, and to check the column header of
-  each figure it quotes — the wide-result trap is quoting June's number in May's
-  clause. That is a prompt, not a proof. An isolated checker per claim is what
-  would make it a guarantee.
+- **Only the *presence* of a figure is verified, not its claim.** Every number in
+  the reply is checked against the cells the narrator was shown, so an invented
+  figure is caught. Which column it belongs to is not — the wide-result trap is
+  quoting June's number in May's clause, and both numbers are real. That part is
+  still a prompt, not a proof; an isolated checker per claim is what would make
+  it a guarantee.
 - Heuristic token counting; swap `estimate_tokens()` for a real tokenizer for
   tighter packing.
 - The join scan probes at most 40 column pairs, name-matched first, so a very wide
